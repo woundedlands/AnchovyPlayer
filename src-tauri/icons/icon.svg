@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff9454" />
+      <stop offset="1" stop-color="#f05a24" />
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.16" />
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0" />
+    </linearGradient>
+  </defs>
+
+  <!-- Tile -->
+  <rect x="16" y="16" width="992" height="992" rx="224" fill="url(#background)" />
+  <rect x="16" y="16" width="992" height="992" rx="224" fill="url(#sheen)" />
+
+  <!-- An anchovy chopped into three: tail, a sound wave in place of the middle, head.
+       Both cuts are the same height (y 412-612), so the silhouette still reads as one fish. -->
+  <g fill="#ffffff">
+    <!-- Tail -->
+    <path
+      d="M 262 512 L 142 428 C 162 474 162 550 142 596 Z"
+      stroke="#ffffff"
+      stroke-width="18"
+      stroke-linejoin="round"
+    />
+    <!-- Rear of the body, cut flat -->
+    <path d="M 236 512 C 290 452 340 414 400 412 L 400 612 C 340 610 290 572 236 512 Z" />
+
+    <!-- The middle is a sound wave, swelling above the body -->
+    <rect x="428" y="392" width="28" height="240" rx="14" />
+    <rect x="484" y="327" width="28" height="370" rx="14" />
+    <rect x="540" y="287" width="28" height="450" rx="14" />
+    <rect x="596" y="327" width="28" height="370" rx="14" />
+    <rect x="652" y="392" width="28" height="240" rx="14" />
+
+    <!-- Head, cut flat at the back, blunt nose -->
+    <path d="M 708 412 C 800 412 882 452 882 512 C 882 572 800 612 708 612 Z" />
+  </g>
+
+  <!-- Eye, cut out in the tile colour -->
+  <circle cx="800" cy="492" r="19" fill="#f4732f" />
+</svg>
