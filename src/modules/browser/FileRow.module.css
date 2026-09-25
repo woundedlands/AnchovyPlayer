@@ -38,6 +38,11 @@
   color: var(--app-accent);
 }
 
+/* Already heard in this visit to the folder: a touch greyer, still easy to read. */
+.row[data-played]:not([data-current]) .name {
+  color: color-mix(in srgb, var(--app-text) 58%, transparent);
+}
+
 .row[data-kind="unsupported"] {
   opacity: 0.5;
 }

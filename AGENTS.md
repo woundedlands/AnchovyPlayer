@@ -5,8 +5,8 @@ Anchovy Player - a minimalist desktop audio player built around an integrated fi
 # Project Structure
 
 1. `src/` - frontend (React). `src/main.tsx` is the entry point only.
-2. `src/core/` - the app shell and what every module relies on: providers, theme, top-level layout, shared hooks and helpers.
-3. `src/modules/<Module>/` - one folder per module (browser, player, waveform...). Components, hooks, styles and backend call wrappers of a module live together. A module may use `core`; `core` never imports a module except in the top-level layout.
+2. `src/core/` - the app shell and what every module relies on: providers, theme, settings, shared helpers. Its shell files (`App.tsx`, `flow.ts` for cross-module flow, `keyboard.ts`) are the only core code that imports modules.
+3. `src/modules/<Module>/` - one folder per module (browser, player...). Store, components, styles and backend call wrappers of a module live together. Modules never import each other; what connects them lives in `core/flow.ts`.
 4. `src-tauri/src/` - backend (Rust). One module per subsystem (`audio/`, `fs/`...). Tauri commands are thin wrappers that call into modules; logic does not live in command handlers.
 5. **Domain logic and all flow live in TypeScript.** Rust provides only primitives TypeScript cannot do or should not own: the audio engine (decode, play, seek, loop, cache, prefetch, waveform peaks), filesystem primitives (list, watch, recursive walk), drag-out and shell integration. Navigation, focus, playback order, repeat/shuffle, search matching, format classification and sorting are TypeScript. When unsure where something goes, it goes to TypeScript.
 6. Audio is decoded and played **only in Rust**. The WebView never touches audio data except for waveform peaks already reduced by the backend.
@@ -45,3 +45,9 @@ Reach for these before adding a dependency or writing your own.
 2. Tabler icons (`@tabler/icons-react`) - the only icon set.
 3. cpal - audio output.
 4. symphonia + symphonia-adapter-libopus - decoding. Formats and what is not covered are in dev.md.
+5. zustand - app state. One store per module (`<module>Store.ts`) plus `core/settingsStore.ts`. Components select only what they render; non-React code uses `getState()`. No `persist` middleware: see settings below.
+
+# Persistent data
+
+1. Preferences live in `settings.json` in the app config folder, written by `core/settingsStore.ts` through the `load_settings` / `save_settings` commands. Nothing persistent goes to localStorage.
+2. Keep the file **flat**: one key per preference, each with its own default. Parsing is field by field - an invalid or missing value falls back to its default without touching the rest, unknown keys are dropped. Bump the file `version` only when a key changes meaning.

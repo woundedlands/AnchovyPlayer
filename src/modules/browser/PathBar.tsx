@@ -8,7 +8,8 @@ import classes from "./PathBar.module.css";
 
 interface PathBarProps {
   dir: string | null;
-  onNavigate: (path: string | null) => void;
+  /** `focusPath` is the folder we came out of, focused in the list like every file manager does. */
+  onNavigate: (path: string | null, focusPath?: string) => void;
   onUp: () => void;
   /** Called when editing ends, so keyboard control returns to the list. */
   onDone: () => void;
@@ -103,7 +104,7 @@ export function PathBar({ dir, onNavigate, onUp, onDone }: PathBarProps) {
             className={classes.crumb}
             onClick={(event) => {
               event.stopPropagation();
-              onNavigate(null);
+              onNavigate(null, segments[0]);
             }}
           >
             <IconDeviceDesktop size={18} />
@@ -122,7 +123,8 @@ export function PathBar({ dir, onNavigate, onUp, onDone }: PathBarProps) {
                 data-last={index === segments.length - 1 || undefined}
                 onClick={(event) => {
                   event.stopPropagation();
-                  onNavigate(joinSegments(segments.slice(0, index + 1)));
+                  const cameFrom = index + 1 < segments.length ? joinSegments(segments.slice(0, index + 2)) : undefined;
+                  onNavigate(joinSegments(segments.slice(0, index + 1)), cameFrom);
                 }}
               >
                 {segment}

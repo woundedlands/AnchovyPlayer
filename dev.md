@@ -11,22 +11,23 @@ The UX bar: large, calm, modern UI; every interaction answers instantly; nothing
 ### Core features
 
 - **Integrated file browser** is the main view, not a dialog. Every folder but the drives list starts with a `..` row. The folder is watched live: files added, removed, renamed or rewritten on disk show up without a manual refresh.
-- **Path bar works like Windows Explorer**: breadcrumbs, a click on a segment goes there, a click on the empty space turns it into a raw editable path (Enter goes, Esc cancels, Tab completes a folder name). Leading segments that do not fit collapse into `…`. There is deliberately no shortcut for it.
+- **Path bar works like Windows Explorer**: breadcrumbs, a click on a segment goes there with the folder we came out of focused, a click on the empty space turns it into a raw editable path (Enter goes, Esc cancels, Tab completes a folder name). Leading segments that do not fit collapse into `…`. There is deliberately no shortcut for it.
 - **Focus and playback are separate things.** One click or an arrow key moves *focus* to an item. Each track row also has a classic play button. **Play on focus** is a setting (on by default): focusing an audio file plays it - this is the SFX audition mode. Clicking the focused file again replays it.
 - **Two focus zones, file list and player**, each with its own arrow keys. Clicking a zone or Tab switches. The active zone shows an accent edge.
   - List: Up/Down/PageUp/PageDown/Home/End move focus, Left/Backspace go to the parent folder, Right/Enter enter a folder or play a file.
-  - Player: Left/Right seek 5 s (Shift: 1 s), Up/Down change volume, Enter toggles pause.
+  - Player: Left/Right seek 5 s (Shift: 1 s), Up/Down previous/next track (the list focus follows), Enter toggles pause. Volume is the wheel.
   - Anywhere: Space toggles pause (plays the focused file if nothing is loaded), Ctrl+R cycles repeat, Ctrl+F searches, letters jump to name and switch to the list zone.
 - **Jump to name** (like every OS file browser): typed characters accumulate into a prefix for ~1 s after the last key and focus the next item starting with it. Repeating one letter cycles through items starting with that letter. Nothing is filtered or hidden.
 - **Search** is a separate, explicit mode (Ctrl+F or the search field): a fuzzy filter over the current folder and, recursively, its subfolders, shown as paths below the folder. Esc or Left closes it.
 - **Instant playback**, including files a few milliseconds long. A new sound cuts the previous one with a 3 ms fade-out; the new one has no fade-in, because the first samples of an SFX are its attack.
-- **Repeat**: off / current / folder, cycled by Ctrl+R. *Off* stops after the file - auditioning a folder of SFX must not turn into playing all of them. *Current* loops gaplessly. *Folder* plays through the playlist and wraps. **Shuffle** plays every file of the playlist once before any repeats. The playlist is the audio files of the list the track was started from.
+- **Repeat**: off / current / folder, cycled by Ctrl+R. *Off* stops after the file - auditioning a folder of SFX must not turn into playing all of them. *Current* replays, *folder* plays through the playlist and wraps; both wait a **pause between tracks** first (setting, 0.5 s by default) so 50 ms clips do not become a machine gun. With the pause set to none, *current* loops gaplessly inside the engine (for loops and ambiences). **Shuffle** plays every file of the playlist once before any repeats. The playlist is the audio files of the list the track was started from.
 - **Volume** 0-200% on the mouse wheel over the player (Ctrl+wheel anywhere), 5% per notch. Above 100% the output is clamped, not wrapped.
 - **Waveform** of the current file, in the spirit of Unity's audio clip preview: min/max peaks per channel (one lane for mono), click or drag to seek, played part in the accent colour. Times use the unit that fits the track: ms below 1 s, tenths below 10 s, m:ss above.
 - **Drag and drop out**: drag a file from the list into a DAW, engine, explorer or messenger.
 - **Shell integration**: "Open with Anchovy Player" on audio files and on folders. A path argument works already (a second launch forwards it to the running window); the installer registration is not done yet. Opening a file shows its folder with the file focused and playing.
 - **Formats**: wav, mp3, ogg (vorbis, opus), m4a (aac, alac), flac, aiff. Recognised-but-unsupported audio (wma, ape...) is listed and marked; other files are not shown.
-- The app does not remember the last folder or cursor positions between runs; it starts in the Music folder. Preferences (play on focus, repeat, shuffle, volume, theme) are remembered.
+- **Played files are dimmed** in the list while the folder stays open (live reloads keep the marks); opening another folder clears them.
+- The app does not remember the last folder or cursor positions between runs; it starts in the Music folder. Preferences (play on focus, repeat, shuffle, volume, pause between tracks, theme) are remembered in settings.json.
 
 ## Audio engine principles
 
@@ -74,4 +75,6 @@ Prerequisites are Rust (with the MSVC toolchain) and Node only. `npm install` ru
 - Mantine is themed centrally in `src/core/theme.ts`; app surfaces are the `--app-*` CSS variables defined there, components do not hardcode colours.
 - Icons: Tabler only. UI font: Inter (bundled via fontsource, no network).
 - Big hit targets and generous spacing; the list row is the main surface and must stay readable at a glance.
+- **A clip can end before `play()` returns.** A 40 ms file finishes within the IPC round trip, so its end event arrives while the player store still holds the previous track and is ignored; no later status event follows, and repeat-folder silently stops after a few files. `playFile` re-checks the end right after storing the new track.
+- **Stores with session-wide subscriptions reload the page on edit** (`import.meta.hot.accept(() => location.reload())`). Hot-swapping them leaves the old copy subscribed next to the new one: two players react to every event, the list focus and the player bar disagree, and it looks like a playback bug.
 - In development React StrictMode runs effects twice; one-shot startup work is guarded, or the second run cancels the first folder listing.

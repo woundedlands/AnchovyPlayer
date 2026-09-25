@@ -25,6 +25,7 @@ interface FileRowProps {
   zoneActive: boolean;
   current: boolean;
   playing: boolean;
+  played: boolean;
   onFocus: () => void;
   onActivate: () => void;
   onPlay: () => void;
@@ -36,6 +37,7 @@ export function FileRow({
   zoneActive,
   current,
   playing,
+  played,
   onFocus,
   onActivate,
   onPlay,
@@ -53,6 +55,7 @@ export function FileRow({
       data-focused={focused || undefined}
       data-zone-active={zoneActive || undefined}
       data-current={current || undefined}
+      data-played={played || undefined}
       data-kind={entry.kind}
       onPointerDown={(event) => {
         if (event.button !== 0) {

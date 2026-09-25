@@ -1,13 +1,14 @@
 import { ActionIcon, Menu, SegmentedControl, Switch, Text, useMantineColorScheme } from "@mantine/core";
 import { IconSettings } from "@tabler/icons-react";
-import type { Settings } from "./useSettings";
+import { trackGapOptions, useSettings } from "./settingsStore";
 import classes from "./SettingsMenu.module.css";
 
-export function SettingsMenu({ settings }: { settings: Settings }) {
+export function SettingsMenu() {
+  const settings = useSettings();
   const { colorScheme, setColorScheme } = useMantineColorScheme();
 
   return (
-    <Menu position="bottom-end" width={280} shadow="md" closeOnItemClick={false}>
+    <Menu position="bottom-end" width={300} shadow="md" closeOnItemClick={false}>
       <Menu.Target>
         <ActionIcon variant="subtle" color="gray" size="lg" radius="md" aria-label="Settings">
           <IconSettings size={20} />
@@ -18,8 +19,20 @@ export function SettingsMenu({ settings }: { settings: Settings }) {
           label="Play on focus"
           description="Selecting an audio file plays it"
           checked={settings.playOnFocus}
-          onChange={(event) => settings.setPlayOnFocus(event.currentTarget.checked)}
+          onChange={(event) => settings.update({ playOnFocus: event.currentTarget.checked })}
         />
+        <div>
+          <Text size="sm">Pause between tracks</Text>
+          <Text size="xs" c="dimmed" mb={6}>
+            Before a repeat or the next file in the folder
+          </Text>
+          <SegmentedControl
+            fullWidth
+            value={String(settings.trackGapMs)}
+            onChange={(value) => settings.update({ trackGapMs: Number(value) })}
+            data={trackGapOptions.map((ms) => ({ value: String(ms), label: ms === 0 ? "None" : `${ms / 1000} s` }))}
+          />
+        </div>
         <div>
           <Text size="sm" mb={6}>
             Theme

@@ -120,6 +120,39 @@ async fn waveform(engine: State<'_, Engine>, path: String) -> Result<Waveform, S
     })
 }
 
+const SETTINGS_FILE: &str = "settings.json";
+
+/// Raw contents of settings.json, or None on first run. The schema and validation live in TypeScript.
+#[tauri::command]
+async fn load_settings(app: AppHandle) -> Result<Option<String>, String> {
+    let path = settings_path(&app)?;
+    match std::fs::read_to_string(&path) {
+        Ok(text) => Ok(Some(text)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!("Cannot read {}: {error}", path.display())),
+    }
+}
+
+/// Writes through a temporary file and a rename, so a crash mid-write never leaves half a settings file.
+#[tauri::command]
+async fn save_settings(app: AppHandle, contents: String) -> Result<(), String> {
+    let path = settings_path(&app)?;
+    let dir = path.parent().expect("settings path has a parent");
+    std::fs::create_dir_all(dir).map_err(|e| format!("Cannot create {}: {e}", dir.display()))?;
+    let temporary = path.with_extension("json.tmp");
+    std::fs::write(&temporary, contents).map_err(|e| format!("Cannot write {}: {e}", temporary.display()))?;
+    std::fs::rename(&temporary, &path).map_err(|e| format!("Cannot replace {}: {e}", path.display()))
+}
+
+fn settings_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|e| format!("No config folder for settings: {e}"))?;
+
+    Ok(dir.join(SETTINGS_FILE))
+}
+
 /// Image shown under the cursor while dragging a file out of the app.
 #[tauri::command]
 async fn drag_icon_path(app: AppHandle) -> Result<String, String> {
@@ -199,6 +232,8 @@ pub fn run() {
             waveform,
             launch_path,
             drag_icon_path,
+            load_settings,
+            save_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -13,8 +13,8 @@ import {
   IconVolume3,
 } from "@tabler/icons-react";
 import { nameOf, parentOf } from "../../core/paths";
-import type { RepeatMode, Settings } from "../../core/useSettings";
-import { maxVolume, type PlayerController } from "./usePlayer";
+import { maxVolume, useSettings, type RepeatMode } from "../../core/settingsStore";
+import { usePlayer } from "./playerStore";
 import { Waveform } from "./Waveform";
 import classes from "./PlayerBar.module.css";
 
@@ -28,13 +28,13 @@ const repeatLabels: Record<RepeatMode, string> = {
 };
 
 interface PlayerBarProps {
-  player: PlayerController;
-  settings: Settings;
   active: boolean;
   onActivate: () => void;
 }
 
-export function PlayerBar({ player, settings, active, onActivate }: PlayerBarProps) {
+export function PlayerBar({ active, onActivate }: PlayerBarProps) {
+  const player = usePlayer();
+  const settings = useSettings();
   const { status, track, error } = player;
   const playing = status.state === "playing";
   const onCurrentVoice = track !== null && status.voiceId === track.voiceId;
@@ -94,7 +94,7 @@ export function PlayerBar({ player, settings, active, onActivate }: PlayerBarPro
           <ActionIcon size={56} radius="xl" className={classes.play} onClick={player.togglePause}>
             {playing ? <IconPlayerPauseFilled size={26} /> : <IconPlayerPlayFilled size={26} />}
           </ActionIcon>
-          <ActionIcon variant="subtle" size="xl" radius="xl" color="gray" onClick={() => player.next(true)}>
+          <ActionIcon variant="subtle" size="xl" radius="xl" color="gray" onClick={player.next}>
             <IconPlayerSkipForwardFilled size={22} />
           </ActionIcon>
           <Tooltip label={`${repeatLabels[settings.repeat]} · Ctrl+R`}>
@@ -119,7 +119,7 @@ export function PlayerBar({ player, settings, active, onActivate }: PlayerBarPro
             max={maxVolume}
             step={0.01}
             value={settings.volume}
-            onChange={settings.setVolume}
+            onChange={(volume) => settings.update({ volume })}
             label={(value) => `${Math.round(value * 100)}%`}
             marks={[{ value: 1 }]}
             size="sm"

@@ -16,6 +16,8 @@ interface FileListProps {
   zoneActive: boolean;
   currentPath: string | null;
   playing: boolean;
+  /** Files played since the folder was opened; shown slightly dimmed. */
+  played: ReadonlySet<string>;
   emptyText: string;
   onFocus: (index: number) => void;
   onActivate: (index: number) => void;
@@ -29,6 +31,7 @@ export function FileList({
   zoneActive,
   currentPath,
   playing,
+  played,
   emptyText,
   onFocus,
   onActivate,
@@ -81,6 +84,7 @@ export function FileList({
                 zoneActive={zoneActive}
                 current={current}
                 playing={current && playing}
+                played={played.has(entry.path)}
                 onFocus={() => onFocus(item.index)}
                 onActivate={() => onActivate(item.index)}
                 onPlay={() => onPlay(item.index)}
