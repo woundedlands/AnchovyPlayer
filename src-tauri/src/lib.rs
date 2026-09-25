@@ -263,7 +263,9 @@ pub fn run() {
         .on_window_event(tray::on_window_event)
         .setup(|app| {
             tray::setup(app)?;
-            let engine = Engine::start()?;
+            // Waveforms of long files persist here; without a cache folder they are just recomputed.
+            let waveform_dir = app.path().app_cache_dir().ok().map(|dir| dir.join("waveforms"));
+            let engine = Engine::start(waveform_dir)?;
             spawn_status_emitter(app.handle().clone(), engine.clone());
             app.manage(engine);
             app.manage(FolderWatcher::default());

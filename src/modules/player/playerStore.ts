@@ -19,6 +19,11 @@ export interface Advance {
 
 interface PlayerState {
   status: api.PlaybackStatus;
+  /**
+   * Where a seek is going, shown as the position until the engine gets there. Dragging across the
+   * waveform then moves the playhead at display rate however slow the actual seeks are.
+   */
+  seekTarget: number | null;
   track: CurrentTrack | null;
   error: string | null;
   advance: Advance | null;
@@ -48,6 +53,13 @@ const shufflePlayed = new Set<string>();
 let handledEnd = 0;
 let gapTimer: ReturnType<typeof setTimeout> | undefined;
 let advanceSequence = 0;
+/** Latest-wins seeking: one seek in flight at a time; newer requests replace the waiting one. */
+let seekRunning = false;
+let pendingSeek: number | null = null;
+let seekSettledAt = 0;
+/** After the last seek resolves, the engine reports the new position within a buffer or two. */
+const seekSettleMs = 400;
+const seekArrivedSeconds = 0.3;
 /** The current track was opened from Explorer: no repeat until the user starts playback themselves. */
 let oneShot = false;
 
@@ -72,10 +84,13 @@ export const usePlayer = create<PlayerState>()((set, get) => {
     track: null,
     error: null,
     advance: null,
+    seekTarget: null,
 
     playFile: async (path, list, options) => {
       clearTimeout(gapTimer);
       oneShot = options?.oneShot ?? false;
+      pendingSeek = null;
+      set({ seekTarget: null });
       if (list) {
         playlist = list;
       }
@@ -110,10 +125,18 @@ export const usePlayer = create<PlayerState>()((set, get) => {
 
     seekTo: (seconds) => {
       const { duration } = get().status;
-      void api.seek(Math.min(Math.max(seconds, 0), duration > 0 ? duration : seconds));
+      const target = Math.min(Math.max(seconds, 0), duration > 0 ? duration : seconds);
+      set({ seekTarget: target });
+      pendingSeek = target;
+      if (!seekRunning) {
+        void runSeeks();
+      }
     },
 
-    seekBy: (delta) => get().seekTo(get().status.position + delta),
+    seekBy: (delta) => {
+      const { seekTarget, status, seekTo } = get();
+      seekTo((seekTarget ?? status.position) + delta);
+    },
 
     next: () => {
       const current = get().track?.path ?? null;
@@ -165,6 +188,7 @@ export function connectPlayer(): () => void {
   const stopSettings = useSettings.subscribe(applyEngineSettings);
   const unlisten = api.onPlaybackStatus((status) => {
     usePlayer.setState({ status });
+    releaseSeekTarget(status);
     handleTrackEnd(status);
   });
 
@@ -172,6 +196,38 @@ export function connectPlayer(): () => void {
     stopSettings();
     void unlisten.then((stop) => stop());
   };
+}
+
+/**
+ * Seeks one at a time, always to the newest requested position. A drag produces hundreds of
+ * positions per second and a seek in a long stream reopens the file: sending them all queued up
+ * seconds of stale seeks behind the cursor.
+ */
+async function runSeeks() {
+  seekRunning = true;
+  while (pendingSeek !== null) {
+    const target = pendingSeek;
+    pendingSeek = null;
+    try {
+      await api.seek(target);
+    } catch (seekError) {
+      usePlayer.setState({ error: String(seekError) });
+    }
+  }
+  seekRunning = false;
+  seekSettledAt = performance.now();
+}
+
+/** Hands the playhead back to the engine once it has caught up with the last seek. */
+function releaseSeekTarget(status: api.PlaybackStatus) {
+  const { seekTarget } = usePlayer.getState();
+  if (seekTarget === null || seekRunning || pendingSeek !== null) {
+    return;
+  }
+  const arrived = Math.abs(status.position - seekTarget) < seekArrivedSeconds;
+  if (arrived || performance.now() - seekSettledAt > seekSettleMs) {
+    usePlayer.setState({ seekTarget: null });
+  }
 }
 
 /**

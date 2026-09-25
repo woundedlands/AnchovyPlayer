@@ -5,6 +5,7 @@ mod cache;
 mod decode;
 mod output;
 mod waveform;
+mod waveform_store;
 
 pub use waveform::Waveform;
 
@@ -20,6 +21,7 @@ use serde::Serialize;
 use cache::{FileStamp, StampedCache};
 use decode::{CHANNELS, TrackDecoder};
 use output::{Clip, Command, Output, PlayState, Voice};
+use waveform_store::WaveformStore;
 
 /// Files up to this length are decoded whole and cached; longer ones stream from disk.
 const CLIP_MAX_SECONDS: f64 = 60.0;
@@ -67,14 +69,18 @@ struct Inner {
     looping: AtomicBool,
     prefetch_queue: Mutex<VecDeque<PathBuf>>,
     prefetch_wake: Condvar,
+    /// Waveforms of long files on disk; None when the app has no cache folder.
+    waveform_store: Option<WaveformStore>,
 }
 
 #[derive(Clone)]
 pub struct Engine(Arc<Inner>);
 
 impl Engine {
-    pub fn start() -> Result<Self, String> {
+    pub fn start(waveform_dir: Option<PathBuf>) -> Result<Self, String> {
+        let waveform_store = waveform_dir.map(WaveformStore::new);
         let inner = Arc::new(Inner {
+            waveform_store,
             output: Output::start()?,
             clips: Mutex::new(StampedCache::new(CLIP_CACHE_BYTES)),
             waveforms: Mutex::new(StampedCache::new(WAVEFORM_CACHE_BYTES)),
@@ -90,6 +96,18 @@ impl Engine {
                 .name(format!("audio-prefetch-{index}"))
                 .spawn(move || run_prefetch_worker(&inner))
                 .map_err(|e| format!("Cannot start prefetch thread: {e}"))?;
+        }
+
+        if inner.waveform_store.is_some() {
+            let pruner = inner.clone();
+            thread::Builder::new()
+                .name("waveform-prune".into())
+                .spawn(move || {
+                    if let Some(store) = &pruner.waveform_store {
+                        store.prune();
+                    }
+                })
+                .map_err(|e| format!("Cannot start waveform cleanup: {e}"))?;
         }
 
         Ok(Self(inner))
@@ -251,7 +269,7 @@ impl Engine {
         let cached_clip = inner.clips.lock().expect("clip cache poisoned").get(path, stamp, rate);
         let waveform = match cached_clip {
             Some(clip) => waveform::from_samples(&clip.samples, clip.source_channels, clip.frames() as f64 / rate as f64),
-            None => waveform::from_file(path)?,
+            None => inner.waveform_from_file(path)?,
         };
         let waveform = Arc::new(waveform);
         let bytes = waveform.peaks.len() * size_of::<f32>();
@@ -266,6 +284,24 @@ impl Engine {
 }
 
 impl Inner {
+    /// Long files are expensive to analyse, so their waveforms go through the disk store.
+    /// Short ones are cheap and would only fill it with thousands of tiny entries.
+    fn waveform_from_file(&self, path: &Path) -> Result<Waveform, String> {
+        let Some(store) = &self.waveform_store else {
+            return waveform::from_file(path);
+        };
+        let key = waveform_store::fingerprint(path)?;
+        if let Some(stored) = store.load(&key) {
+            return Ok(stored);
+        }
+        let computed = waveform::from_file(path)?;
+        if computed.duration > CLIP_MAX_SECONDS {
+            store.save(&key, &computed);
+        }
+
+        Ok(computed)
+    }
+
     fn decode_clip(&self, path: &Path, stamp: FileStamp, mut decoder: TrackDecoder) -> Arc<Clip> {
         let rate = decoder.output_rate();
         let mut samples = Vec::new();

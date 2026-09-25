@@ -60,10 +60,11 @@ export function buildPalette(accentHex: string): Palette {
       "--app-accent-soft": accent[3],
       "--app-wave": withAlpha(tinted(0.25, 0.01), 0.2),
       "--app-wave-played": accent[5],
-      // Shades of the one accent, four steps apart: clearly a gradient, never a second colour.
-      "--app-accent-gradient": `linear-gradient(135deg, ${accent[4]} 0%, ${accent[8]} 100%)`,
-      "--app-wave-played-start": accent[3],
-      "--app-wave-played-end": accent[8],
+      // Shades of the one accent, from the mid shade (the brightest point) towards dark:
+      // visible as a gradient, never brighter than the accent itself.
+      "--app-accent-gradient": `linear-gradient(135deg, ${accent[6]} 0%, ${accent[9]} 100%)`,
+      "--app-wave-played-start": accent[5],
+      "--app-wave-played-end": accent[9],
       "--app-shadow": `0 1px 2px ${withAlpha(tinted(0.3, 0.03), 0.06)}, 0 8px 24px ${withAlpha(tinted(0.3, 0.03), 0.07)}`,
     },
     dark: {
@@ -79,9 +80,9 @@ export function buildPalette(accentHex: string): Palette {
       "--app-accent-soft": accent[7],
       "--app-wave": withAlpha(graphite[0], 0.18),
       "--app-wave-played": accent[3],
-      "--app-accent-gradient": `linear-gradient(135deg, ${accent[1]} 0%, ${accent[5]} 100%)`,
-      "--app-wave-played-start": accent[1],
-      "--app-wave-played-end": accent[6],
+      "--app-accent-gradient": `linear-gradient(135deg, ${accent[3]} 0%, ${accent[6]} 100%)`,
+      "--app-wave-played-start": accent[3],
+      "--app-wave-played-end": accent[7],
       "--app-shadow": "0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.3)",
     },
   };

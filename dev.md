@@ -35,7 +35,7 @@ The UX bar: large, calm, modern UI; every interaction answers instantly; nothing
 - **The playlist** is the selected audio files when the playing track is one of them, otherwise all audio files of the list. Selecting while something plays re-targets it at once.
 - **Shuffle** is a shuffled round, not pure random: the next track is picked at random among those not played yet in this round, never the current one; the round resets when all have played.
 - **Volume** 0-200%, always on a 5% grid (a step from 6% goes to 10% or 5%): wheel over the player, Ctrl+wheel or Ctrl+Up/Down anywhere. Above 100% the output is clamped, not wrapped.
-- **Waveform**, in the spirit of Unity's audio clip preview: min/max peaks per channel (one lane for mono), click or drag to seek. Times use the unit that fits the track: ms below 1 s, tenths below 10 s, m:ss above.
+- **Waveform**, in the spirit of Unity's audio clip preview: min/max peaks per channel (one lane for mono), click or drag to seek. Files over a minute are split into time segments analysed in parallel, one decoder each, seeked to its segment (a 76-minute AAC: ~14 s in one pass, ~2 s split, in a dev build). GPU would not help: the cost is the codec's sequential entropy decoding, not the min/max. Times use the unit that fits the track: ms below 1 s, tenths below 10 s, m:ss above.
 - **Two focus zones, file list and player**, each with its own arrow keys. Tab or a click on the waveform / empty part of the player bar switches. Transport buttons and the volume slider are a remote control and do not take the zone - otherwise pressing Play and then an arrow skipped tracks instead of moving in the list.
   - List: Up/Down/PageUp/PageDown/Home/End move focus (Shift extends the selection), Left/Backspace parent folder, Right/Enter enter a folder or play a file.
   - Player: Left/Right seek 5 s (Shift: 1 s), Up/Down previous/next track (list focus follows), Enter play/pause.
@@ -62,6 +62,9 @@ These are what makes "instant" true; any change that breaks one of them breaks t
 6. **Status polling adapts**: every 16 ms while playing, 250 ms while idle or paused; every player command wakes the poller and keeps it fast for 500 ms, so the new state is reported at once.
 
 ## Caching
+
+**Waveforms of files over 60 s are kept on disk** (`<app cache>/waveforms`, ~32 KB each), keyed by a content fingerprint - size plus 16 evenly spread 16 KB samples, FNV-1a - so a moved or renamed file still hits and a re-exported one misses. Every hit touches the file's modification time; at each app start a background pass deletes entries unused for 30 days, then the least recently used until the store is under 256 MB. Short files are not stored: their waveform comes from the decoded clip already in memory, instantly.
+
 
 **Every cache entry is keyed by path plus modification time and size** (and output sample rate for PCM), checked on every lookup, so a re-exported file is never served stale even if a watcher event is missed. The folder watcher also evicts changed paths. The search index (a recursive walk) is reused for 10 s while typing, then rebuilt.
 
@@ -106,5 +109,7 @@ Prerequisites are Rust (with the MSVC toolchain) and Node only. `npm install` ru
 - **An inline ref callback on an element measured with Mantine's `useElementSize` re-renders every frame.** Each render re-attaches the ref, the hook starts a new `ResizeObserver`, its first report sets state, which renders again. It showed up as ~20% of a core in the WebView renderer while the app was idle and even minimized, with nothing visible happening. Use a stable ref (`useMergedRef`).
 - **A clip can end before `play()` returns.** A 40 ms file finishes within the IPC round trip, so its end event arrives while the player store still holds the previous track and is ignored; no later status event follows, and repeat silently stops after a few files. `playFile` re-checks the end right after storing the new track.
 - **Stores with session-wide subscriptions reload the page on edit** (`import.meta.hot.accept(() => location.reload())`). Hot-swapping them leaves the old copy subscribed next to the new one: two players react to every event, the list focus and the player bar disagree, and it looks like a playback bug.
+- **Seeking is latest-wins with an optimistic playhead.** A drag across the waveform fires a seek per frame, and a seek in a long stream reopens the file; sent one by one they queued up behind the cursor and the playhead crawled at a few fps. Now one seek is in flight at a time, only the newest waiting position is kept, and `seekTarget` shows the requested position until the engine reports it (or 400 ms pass).
+- Assigning a canvas `width`/`height` reallocates it even with the same value; the waveform redraws every frame while playing, so it only resizes on a real change.
 - In development React StrictMode runs effects twice; one-shot startup work is guarded, or the second run cancels the first folder listing.
 - Mantine popovers inside a `Menu` (the colour picker in settings) must not use a portal, or clicking them counts as a click outside and closes the menu.

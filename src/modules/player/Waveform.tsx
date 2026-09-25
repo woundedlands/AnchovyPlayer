@@ -53,8 +53,14 @@ export function Waveform({ path, position, duration, onSeek }: WaveformProps) {
       return;
     }
     const ratio = window.devicePixelRatio || 1;
-    element.width = Math.round(width * ratio);
-    element.height = Math.round(height * ratio);
+    // Assigning a canvas size reallocates and clears it even when unchanged; this runs every frame
+    // while the playhead moves, so only resize when the size really changed.
+    const pixelWidth = Math.round(width * ratio);
+    const pixelHeight = Math.round(height * ratio);
+    if (element.width !== pixelWidth || element.height !== pixelHeight) {
+      element.width = pixelWidth;
+      element.height = pixelHeight;
+    }
     const context = element.getContext("2d");
     if (!context) {
       return;

@@ -35,7 +35,8 @@ export function PlayerBar({ active, onActivate, onTogglePlay }: PlayerBarProps) 
   const onCurrentVoice = track !== null && status.voiceId === track.voiceId;
   // The device reports position per audio block; a track that played out shows as fully played.
   const ended = track !== null && status.endedVoiceId === track.voiceId && status.state === "idle";
-  const position = onCurrentVoice ? (ended ? status.duration : status.position) : 0;
+  const enginePosition = onCurrentVoice ? (ended ? status.duration : status.position) : 0;
+  const position = player.seekTarget ?? enginePosition;
   const duration = onCurrentVoice ? status.duration : 0;
 
   return (
