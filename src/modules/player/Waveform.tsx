@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useComputedColorScheme } from "@mantine/core";
 import { useElementSize } from "@mantine/hooks";
+import { useSettings } from "../../core/settingsStore";
 import { loadWaveform, type Waveform as WaveformData } from "./api";
 import classes from "./Waveform.module.css";
 
@@ -18,6 +19,8 @@ export function Waveform({ path, position, duration, onSeek }: WaveformProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const { ref: frame, width, height } = useElementSize();
   const scheme = useComputedColorScheme("dark");
+  // Canvas colours come from CSS variables, which a canvas does not follow: redraw on theme changes.
+  const accentColor = useSettings((state) => state.accentColor);
   const dragging = useRef(false);
 
   useEffect(() => {
@@ -61,6 +64,10 @@ export function Waveform({ path, position, duration, onSeek }: WaveformProps) {
     const styles = getComputedStyle(element);
     const waveColor = styles.getPropertyValue("--app-wave").trim();
     const playedColor = styles.getPropertyValue("--app-wave-played").trim();
+    // The played part runs through the accent's shades left to right, a subtle sheen along time.
+    const played = context.createLinearGradient(0, 0, width, 0);
+    played.addColorStop(0, styles.getPropertyValue("--app-wave-played-start").trim() || playedColor);
+    played.addColorStop(1, styles.getPropertyValue("--app-wave-played-end").trim() || playedColor);
     if (!data) {
       context.fillStyle = waveColor;
       context.fillRect(0, height / 2 - 0.5, width, 1);
@@ -87,7 +94,7 @@ export function Waveform({ path, position, duration, onSeek }: WaveformProps) {
         }
         const y1 = center - Math.min(max, 1) * half;
         const y2 = center - Math.max(min, -1) * half;
-        context.fillStyle = column < playedX ? playedColor : waveColor;
+        context.fillStyle = column < playedX ? played : waveColor;
         context.fillRect(column, y1, 1, Math.max(1, y2 - y1));
       }
     }
@@ -95,7 +102,7 @@ export function Waveform({ path, position, duration, onSeek }: WaveformProps) {
       context.fillStyle = playedColor;
       context.fillRect(Math.min(playedX, width - 2), 0, 2, height);
     }
-  }, [data, width, height, progress, total, scheme]);
+  }, [data, width, height, progress, total, scheme, accentColor]);
 
   const seekFromPointer = (event: React.PointerEvent<HTMLDivElement>) => {
     if (total <= 0) {

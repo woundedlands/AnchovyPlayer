@@ -5,10 +5,14 @@ import { useBrowser } from "../modules/browser/browserStore";
 import { FileList } from "../modules/browser/FileList";
 import { PathBar } from "../modules/browser/PathBar";
 import { useSearch } from "../modules/browser/searchStore";
-import { PlayerBar, volumeWheelStep } from "../modules/player/PlayerBar";
+import { PlayerBar } from "../modules/player/PlayerBar";
 import { usePlayer } from "../modules/player/playerStore";
-import { activate, focusByUser, openPath, playFromRow, startApp, togglePlayback, useVisibleList } from "./flow";
+import { useSelection } from "../modules/browser/selectionStore";
+import { activate, dragPaths, openPath, playFromRow, pressEntry, startApp, togglePlayback, useVisibleList } from "./flow";
 import { handleKey } from "./keyboard";
+import { EntryMenu } from "./EntryMenu";
+import { useT } from "./i18n";
+import { commitRename, openContextMenu } from "./fileActions";
 import { SettingsMenu } from "./SettingsMenu";
 import { useSettings } from "./settingsStore";
 import { searchInput, useUi } from "./uiStore";
@@ -20,11 +24,15 @@ export function App() {
   const dir = useBrowser((state) => state.dir);
   const error = useBrowser((state) => state.error);
   const played = useBrowser((state) => state.played);
+  const selected = useSelection((state) => state.selected);
+  const renaming = useUi((state) => state.renaming);
+  const notice = useUi((state) => state.notice);
   const search = useSearch();
   const currentPath = usePlayer((state) => state.track?.path ?? null);
   const playing = usePlayer((state) => state.status.state === "playing");
   const playOnFocus = useSettings((state) => state.playOnFocus);
   const { entries, focusIndex, searching } = useVisibleList();
+  const t = useT();
 
   useEffect(() => startApp(), []);
 
@@ -39,10 +47,10 @@ export function App() {
       return error;
     }
     if (searching) {
-      return search.indexing ? "Indexing folder…" : "No matches";
+      return search.indexing ? t.indexing : t.noMatches;
     }
 
-    return "No audio files here";
+    return t.noAudio;
   })();
 
   return (
@@ -51,7 +59,7 @@ export function App() {
       onWheel={(event) => {
         // Ctrl+wheel changes volume anywhere; the plain wheel does it over the player bar.
         if (event.ctrlKey) {
-          usePlayer.getState().changeVolume(event.deltaY < 0 ? volumeWheelStep : -volumeWheelStep);
+          usePlayer.getState().stepVolume(event.deltaY < 0 ? 1 : -1);
         }
       }}
     >
@@ -67,7 +75,7 @@ export function App() {
         <TextInput
           ref={searchInput}
           className={classes.search}
-          placeholder="Search in folder"
+          placeholder={t.searchPlaceholder}
           leftSection={search.indexing ? <Loader size={14} /> : <IconSearch size={16} />}
           rightSection={search.active ? null : <Kbd size="xs">Ctrl F</Kbd>}
           rightSectionWidth={56}
@@ -84,10 +92,10 @@ export function App() {
         data-active={zone === "browser" || undefined}
         onPointerDown={() => setZone("browser")}
       >
-        {searching && (
-          <Text className={classes.searchInfo}>
-            {search.results.length} results{search.partial ? " · folder too large, partial results" : ""} · Esc to
-            close
+        {(searching || selected.size > 0) && (
+          <Text className={classes.listInfo}>
+            {searching && `${t.results(search.results.length)}${search.partial ? ` · ${t.partialResults}` : ""} · `}
+            {selected.size > 0 ? t.selected(selected.size) : t.escToClose}
           </Text>
         )}
         <FileList
@@ -98,8 +106,20 @@ export function App() {
           currentPath={currentPath}
           playing={playing}
           played={played}
+          selected={selected}
           emptyText={emptyText}
-          onFocus={(index) => focusByUser(index, true)}
+          onPress={pressEntry}
+          getDragPaths={dragPaths}
+          onContextMenu={openContextMenu}
+          renamingKey={renaming}
+          onRenameDone={(index, newName) => {
+            const entry = entries[index];
+            if (entry && newName !== null) {
+              void commitRename(entry, newName);
+            } else {
+              useUi.getState().setRenaming(null);
+            }
+          }}
           onActivate={(index) => {
             // With play-on-focus the clicks of a double click already played the file.
             if (entries[index]?.kind !== "audio" || !playOnFocus) {
@@ -109,6 +129,13 @@ export function App() {
           onPlay={playFromRow}
         />
       </main>
+
+      {notice && (
+        <div className={classes.notice} data-error={notice.error || undefined}>
+          {notice.text}
+        </div>
+      )}
+      <EntryMenu />
 
       <PlayerBar active={zone === "player"} onActivate={() => setZone("player")} onTogglePlay={togglePlayback} />
     </div>

@@ -1,5 +1,8 @@
 //! Filesystem primitives. Classification by extension, sorting, filtering and matching are TypeScript.
 
+pub mod clipboard;
+pub mod ops;
+
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, UNIX_EPOCH};

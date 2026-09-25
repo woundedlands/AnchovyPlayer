@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "postinstall": "node scripts/setup-tools.mjs",
-    "dev": "vite",
+    "dev": "node scripts/dev.mjs",
+    "vite": "vite",
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
@@ -19,6 +20,7 @@
     "@tabler/icons-react": "^3.48.0",
     "@tanstack/react-virtual": "^3.14.13",
     "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-opener": "^2.5.5",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "zustand": "^5.0.15"

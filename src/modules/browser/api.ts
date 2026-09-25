@@ -37,3 +37,24 @@ export const onFolderChanged = (handler: (change: FolderChanged) => void): Promi
 
 export const onOpenPath = (handler: (path: string) => void): Promise<UnlistenFn> =>
   listen<string>("open-path", (event) => handler(event.payload));
+
+export interface ClipboardFiles {
+  paths: string[];
+  /** Cut rather than copied: pasting moves the files. */
+  cut: boolean;
+}
+
+/** Returns the new path. */
+export const renameEntry = (path: string, newName: string) => invoke<string>("rename_entry", { path, newName });
+
+export const trashEntries = (paths: string[]) => invoke<void>("trash_entries", { paths });
+
+/** Copies, or moves when `removeSource`; returns the created paths. */
+export const transferEntries = (sources: string[], destDir: string, removeSource: boolean) =>
+  invoke<string[]>("transfer_entries", { sources, destDir, removeSource });
+
+export const clipboardSetFiles = (paths: string[], cut: boolean) => invoke<void>("clipboard_set_files", { paths, cut });
+
+export const clipboardGetFiles = () => invoke<ClipboardFiles>("clipboard_get_files");
+
+export const clipboardClear = () => invoke<void>("clipboard_clear");

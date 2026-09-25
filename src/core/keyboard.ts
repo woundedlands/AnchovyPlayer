@@ -1,7 +1,18 @@
 import { jumpToName, useBrowser } from "../modules/browser/browserStore";
 import { useSearch } from "../modules/browser/searchStore";
 import { usePlayer } from "../modules/player/playerStore";
-import { activate, focusByUser, leaveSearch, togglePlayback, visibleList } from "./flow";
+import { useSelection } from "../modules/browser/selectionStore";
+import {
+  activate,
+  extendSelectionTo,
+  focusByUser,
+  leaveSearch,
+  selectAllVisible,
+  toggleFocusedInSelection,
+  togglePlayback,
+  visibleList,
+} from "./flow";
+import { copyPaths, copyToClipboard, pasteIntoFolder, startRename, trashTargets } from "./fileActions";
 import { searchInput, useUi } from "./uiStore";
 
 const pageSize = 10;
@@ -25,6 +36,10 @@ function handleGlobalKey(event: KeyboardEvent, inSearch: boolean): boolean {
   const { zone, setZone } = useUi.getState();
   const player = usePlayer.getState();
 
+  if (ctrl && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+    player.stepVolume(event.key === "ArrowUp" ? 1 : -1);
+    return true;
+  }
   if (ctrl && event.code === "KeyF") {
     searchInput.current?.focus();
     searchInput.current?.select();
@@ -35,6 +50,10 @@ function handleGlobalKey(event: KeyboardEvent, inSearch: boolean): boolean {
     player.cycleRepeat();
     return true;
   }
+  if (event.key === "Escape" && useSelection.getState().selected.size > 0) {
+    useSelection.getState().clear();
+    return true;
+  }
   if (event.key === "Escape" && useSearch.getState().active) {
     leaveSearch();
     return true;
@@ -43,6 +62,18 @@ function handleGlobalKey(event: KeyboardEvent, inSearch: boolean): boolean {
     // Typing goes into the field; only list navigation keys are taken over.
     const navigation = ["ArrowDown", "ArrowUp", "PageDown", "PageUp", "Enter"];
     return navigation.includes(event.key) && handleBrowserKey(event);
+  }
+  if (handleFileKey(event, ctrl)) {
+    return true;
+  }
+  if (ctrl && event.code === "KeyA") {
+    setZone("browser");
+    selectAllVisible();
+    return true;
+  }
+  if (ctrl && event.key === " ") {
+    toggleFocusedInSelection();
+    return true;
   }
   if (event.key === "Tab") {
     setZone(zone === "browser" ? "player" : "browser");
@@ -74,25 +105,17 @@ function handleGlobalKey(event: KeyboardEvent, inSearch: boolean): boolean {
 
 function handleBrowserKey(event: KeyboardEvent): boolean {
   const { entries, focusIndex, searching } = visibleList();
+  const target = navigationTarget(event.key, focusIndex, entries.length);
+  if (target !== null) {
+    // Shift extends the selection; plain moves keep it, so a group survives browsing around it.
+    if (event.shiftKey) {
+      extendSelectionTo(target);
+    } else {
+      focusByUser(target, false);
+    }
+    return true;
+  }
   switch (event.key) {
-    case "ArrowDown":
-      focusByUser(focusIndex + 1, false);
-      return true;
-    case "ArrowUp":
-      focusByUser(focusIndex - 1, false);
-      return true;
-    case "PageDown":
-      focusByUser(focusIndex + pageSize, false);
-      return true;
-    case "PageUp":
-      focusByUser(focusIndex - pageSize, false);
-      return true;
-    case "Home":
-      focusByUser(0, false);
-      return true;
-    case "End":
-      focusByUser(entries.length - 1, false);
-      return true;
     case "ArrowRight":
     case "Enter":
       activate(focusIndex);
@@ -108,6 +131,58 @@ function handleBrowserKey(event: KeyboardEvent): boolean {
   }
 
   return false;
+}
+
+/** Explorer's file shortcuts, acting on the selection or the focused row. */
+function handleFileKey(event: KeyboardEvent, ctrl: boolean): boolean {
+  const { focusIndex } = visibleList();
+  if (event.key === "F2") {
+    startRename(focusIndex);
+    return true;
+  }
+  if (event.key === "Delete") {
+    void trashTargets(focusIndex);
+    return true;
+  }
+  if (!ctrl) {
+    return false;
+  }
+  switch (event.code) {
+    case "KeyC":
+      if (event.shiftKey) {
+        void copyPaths(focusIndex);
+      } else {
+        void copyToClipboard(focusIndex, false);
+      }
+      return true;
+    case "KeyX":
+      void copyToClipboard(focusIndex, true);
+      return true;
+    case "KeyV":
+      void pasteIntoFolder();
+      return true;
+  }
+
+  return false;
+}
+
+function navigationTarget(key: string, focusIndex: number, count: number): number | null {
+  switch (key) {
+    case "ArrowDown":
+      return focusIndex + 1;
+    case "ArrowUp":
+      return focusIndex - 1;
+    case "PageDown":
+      return focusIndex + pageSize;
+    case "PageUp":
+      return focusIndex - pageSize;
+    case "Home":
+      return 0;
+    case "End":
+      return count - 1;
+  }
+
+  return null;
 }
 
 function handlePlayerKey(event: KeyboardEvent): boolean {

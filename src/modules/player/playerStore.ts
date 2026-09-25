@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { maxVolume, repeatModes, useSettings } from "../../core/settingsStore";
+import { maxVolume, repeatModes, useSettings, volumeStep } from "../../core/settingsStore";
 import * as api from "./api";
 import { nextTrack, previousTrack } from "./playOrder";
 
@@ -23,11 +23,13 @@ interface PlayerState {
   error: string | null;
   advance: Advance | null;
   /**
-   * Plays `path`; `playlist` becomes the list for next/previous, repeat-folder and shuffle.
+   * Plays `path`; `playlist` becomes the list for next/previous, repeat-group and shuffle.
    * `oneShot` plays it once whatever the repeat mode - for files opened from Explorer, where a
    * sound suddenly looping or the whole folder starting would be alarming.
    */
   playFile: (path: string, playlist?: string[], options?: { oneShot?: boolean }) => Promise<void>;
+  /** Replaces the playlist without touching playback, e.g. when the selection changes mid-track. */
+  setPlaylist: (paths: string[]) => void;
   togglePause: () => void;
   seekTo: (seconds: number) => void;
   seekBy: (delta: number) => void;
@@ -35,7 +37,8 @@ interface PlayerState {
   previous: () => void;
   cycleRepeat: () => void;
   toggleShuffle: () => void;
-  changeVolume: (delta: number) => void;
+  /** One 5% step up or down, landing on the 5% grid. */
+  stepVolume: (direction: 1 | -1) => void;
 }
 
 const idleStatus: api.PlaybackStatus = { state: "idle", voiceId: 0, position: 0, duration: 0, endedVoiceId: 0 };
@@ -90,6 +93,10 @@ export const usePlayer = create<PlayerState>()((set, get) => {
       }
     },
 
+    setPlaylist: (paths) => {
+      playlist = paths;
+    },
+
     togglePause: () => {
       const { status, track, playFile } = get();
       if (status.state === "playing") {
@@ -133,10 +140,14 @@ export const usePlayer = create<PlayerState>()((set, get) => {
       update({ shuffle: !shuffle });
     },
 
-    changeVolume: (delta) => {
+    stepVolume: (direction) => {
       const { volume, update } = useSettings.getState();
-      // Rounded to whole percents so repeated wheel steps do not drift to 99.99%.
-      update({ volume: Math.round(Math.min(Math.max(volume + delta, 0), maxVolume) * 100) / 100 });
+      // From an off-grid value (dragged to 6%) the first step snaps to the neighbour: up to 10%, down to 5%.
+      // The epsilon keeps floating-point noise (0.15000001) from skipping a step.
+      const steps = volume / volumeStep;
+      const target = direction > 0 ? Math.floor(steps + 1e-6) + 1 : Math.ceil(steps - 1e-6) - 1;
+      const next = Math.min(Math.max(target * volumeStep, 0), maxVolume);
+      update({ volume: Math.round(next * 100) / 100 });
     },
   };
 });
@@ -165,7 +176,7 @@ export function connectPlayer(): () => void {
 
 /**
  * Off stops after the file - auditioning a folder of sound effects must not turn into playing all
- * of them. Current replays, folder moves on; both wait the configured gap first.
+ * of them. Current replays, group moves on through the playlist; both wait the configured gap first.
  */
 function handleTrackEnd(status: api.PlaybackStatus) {
   const { track, next, playFile } = usePlayer.getState();

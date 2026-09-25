@@ -5,9 +5,9 @@
 //! through a wait-free ring buffer and replaced voices are handed back to be dropped elsewhere.
 
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, mpsc};
+use std::sync::{Arc, Condvar, Mutex, mpsc};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{ErrorKind, FromSample, SampleFormat, SizedSample, StreamConfig};
@@ -19,6 +19,10 @@ const VOLUME_RAMP_SECONDS: f32 = 0.02;
 const COMMAND_CAPACITY: usize = 64;
 const GARBAGE_CAPACITY: usize = 64;
 const MIX_BLOCK_FRAMES: usize = 1024;
+/** Silence this long lets the device stream pause. An open stream counts as audio in use, which keeps
+ *  Windows from sleeping - bad for an app that lives in the tray. The next command resumes it. */
+const SUSPEND_AFTER: Duration = Duration::from_secs(300);
+const IDLE_CHECK: Duration = Duration::from_secs(1);
 
 /// Interleaved stereo PCM at the device rate, fully in memory.
 pub struct Clip {
@@ -347,9 +351,21 @@ fn write_frame<T: SizedSample + FromSample<f32>>(frame: &mut [T], stereo: &[f32]
 
 /// Handle to the output thread. Commands are pushed from any thread through a mutex that the
 /// audio callback never touches - it only sees the consumer end of the ring.
+enum Control {
+    /// The device is gone or the stream invalid: build a new one.
+    Rebuild,
+    /// A command arrived while the stream was paused for idleness.
+    Wake,
+}
+
 pub struct Output {
     commands: Mutex<rtrb::Producer<Command>>,
+    control: Mutex<mpsc::Sender<Control>>,
+    suspended: Arc<AtomicBool>,
     pub status: Arc<Status>,
+    /// Set by every command, so whoever polls `status` can sleep long while nothing happens.
+    activity: Mutex<bool>,
+    activity_signal: Condvar,
 }
 
 impl Output {
@@ -377,24 +393,58 @@ impl Output {
 
         spawn_garbage_collector(garbage_rx);
         let (ready_tx, ready_rx) = mpsc::channel();
+        let (control_tx, control_rx) = mpsc::channel();
+        let suspended = Arc::new(AtomicBool::new(false));
+        let thread_control = control_tx.clone();
+        let thread_suspended = suspended.clone();
         thread::Builder::new()
             .name("audio-output".into())
-            .spawn(move || run_output_thread(Arc::new(Mutex::new(mixer)), ready_tx))
+            .spawn(move || {
+                run_output_thread(Arc::new(Mutex::new(mixer)), ready_tx, thread_control, control_rx, thread_suspended)
+            })
             .map_err(|e| format!("Cannot start audio thread: {e}"))?;
         ready_rx
             .recv()
             .map_err(|_| "Audio thread exited before opening the device".to_string())??;
 
-        Ok(Self { commands: Mutex::new(command_tx), status })
+        Ok(Self {
+            commands: Mutex::new(command_tx),
+            control: Mutex::new(control_tx),
+            suspended,
+            status,
+            activity: Mutex::new(false),
+            activity_signal: Condvar::new(),
+        })
+    }
+
+    /// Sleeps until a command is sent or `timeout` passes. Returns true when woken by a command.
+    pub fn wait_for_activity(&self, timeout: Duration) -> bool {
+        let flag = self.activity.lock().expect("activity lock poisoned");
+        let (mut flag, _) = self
+            .activity_signal
+            .wait_timeout_while(flag, timeout, |active| !*active)
+            .expect("activity lock poisoned");
+        let woken = *flag;
+        *flag = false;
+
+        woken
     }
 
     pub fn send(&self, command: Command) {
+        *self.activity.lock().expect("activity lock poisoned") = true;
+        self.activity_signal.notify_all();
         let mut commands = self.commands.lock().expect("command producer lock poisoned");
         // The callback drains the ring every few milliseconds; a full ring means the device is stalled.
         let mut command = command;
         for _ in 0..50 {
             match commands.push(command) {
-                Ok(()) => return,
+                Ok(()) => {
+                    // Checked after the push: see `try_suspend` for why this order cannot lose a command.
+                    if self.suspended.load(Ordering::SeqCst) {
+                        let _ = self.control.lock().expect("control lock poisoned").send(Control::Wake);
+                    }
+                    return;
+                }
                 Err(rtrb::PushError::Full(rejected)) => {
                     command = rejected;
                     thread::sleep(Duration::from_millis(2));
@@ -422,20 +472,27 @@ fn spawn_garbage_collector(mut garbage: rtrb::Consumer<Voice>) {
 
 /// Owns the cpal stream (not `Send` on every platform) and rebuilds it when the device goes away,
 /// e.g. headphones unplugged or the default device switched.
-fn run_output_thread(mixer: Arc<Mutex<Mixer>>, ready: mpsc::Sender<Result<(), String>>) {
-    let (rebuild_tx, rebuild_rx) = mpsc::channel::<()>();
+fn run_output_thread(
+    mixer: Arc<Mutex<Mixer>>,
+    ready: mpsc::Sender<Result<(), String>>,
+    control_tx: mpsc::Sender<Control>,
+    control_rx: mpsc::Receiver<Control>,
+    suspended: Arc<AtomicBool>,
+) {
     let mut ready = Some(ready);
     loop {
-        let stream = open_stream(mixer.clone(), rebuild_tx.clone());
+        let stream = open_stream(mixer.clone(), control_tx.clone());
         match (stream, ready.take()) {
             (Ok(stream), ready) => {
                 if let Some(ready) = ready {
                     let _ = ready.send(Ok(()));
                 }
-                // Blocks until the error callback asks for a rebuild; the stream stays alive meanwhile.
-                let _ = rebuild_rx.recv();
+                if !run_stream(&stream, &mixer, &control_rx, &suspended) {
+                    return;
+                }
                 drop(stream);
-                while rebuild_rx.try_recv().is_ok() {}
+                suspended.store(false, Ordering::SeqCst);
+                while control_rx.try_recv().is_ok() {}
             }
             (Err(error), Some(ready)) => {
                 let _ = ready.send(Err(error));
@@ -449,7 +506,63 @@ fn run_output_thread(mixer: Arc<Mutex<Mixer>>, ready: mpsc::Sender<Result<(), St
     }
 }
 
-fn open_stream(mixer: Arc<Mutex<Mixer>>, rebuild: mpsc::Sender<()>) -> Result<cpal::Stream, String> {
+/// Keeps one stream alive: pauses it after a long silence, resumes it on the next command, and
+/// returns when it must be rebuilt (true) or the app is shutting down (false).
+fn run_stream(
+    stream: &cpal::Stream,
+    mixer: &Mutex<Mixer>,
+    control_rx: &mpsc::Receiver<Control>,
+    suspended: &AtomicBool,
+) -> bool {
+    let mut idle_since: Option<Instant> = None;
+    loop {
+        match control_rx.recv_timeout(IDLE_CHECK) {
+            Ok(Control::Rebuild) => return true,
+            Ok(Control::Wake) => {
+                if suspended.swap(false, Ordering::SeqCst) {
+                    if let Err(error) = stream.play() {
+                        eprintln!("audio: resuming output failed, rebuilding: {error}");
+                        return true;
+                    }
+                }
+                idle_since = None;
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                if suspended.load(Ordering::SeqCst) {
+                    continue;
+                }
+                let since = *idle_since.get_or_insert_with(Instant::now);
+                if since.elapsed() >= SUSPEND_AFTER {
+                    if try_suspend(mixer, suspended) {
+                        if let Err(error) = stream.pause() {
+                            eprintln!("audio: pausing idle output failed: {error}");
+                            suspended.store(false, Ordering::SeqCst);
+                        }
+                    } else {
+                        idle_since = None;
+                    }
+                }
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => return false,
+        }
+    }
+}
+
+/// Marks the output suspended if nothing plays and no command is waiting. The flag is set first,
+/// then the queue is checked: a sender pushes first and checks the flag after, so every command is
+/// either seen here (and the suspend is cancelled) or sees the flag and sends a wake-up.
+fn try_suspend(mixer: &Mutex<Mixer>, suspended: &AtomicBool) -> bool {
+    suspended.store(true, Ordering::SeqCst);
+    let mixer = mixer.lock().expect("mixer lock poisoned");
+    let quiet = mixer.current.is_none() && mixer.fading.is_none() && mixer.commands.slots() == 0;
+    if !quiet {
+        suspended.store(false, Ordering::SeqCst);
+    }
+
+    quiet
+}
+
+fn open_stream(mixer: Arc<Mutex<Mixer>>, control: mpsc::Sender<Control>) -> Result<cpal::Stream, String> {
     let host = cpal::default_host();
     let device = host.default_output_device().ok_or("No audio output device found")?;
     let supported = device
@@ -463,10 +576,10 @@ fn open_stream(mixer: Arc<Mutex<Mixer>>, rebuild: mpsc::Sender<()>) -> Result<cp
         .set_sample_rate(config.sample_rate);
 
     match format {
-        SampleFormat::F32 => build_stream::<f32>(&device, config, mixer, rebuild),
-        SampleFormat::I16 => build_stream::<i16>(&device, config, mixer, rebuild),
-        SampleFormat::I32 => build_stream::<i32>(&device, config, mixer, rebuild),
-        SampleFormat::U16 => build_stream::<u16>(&device, config, mixer, rebuild),
+        SampleFormat::F32 => build_stream::<f32>(&device, config, mixer, control),
+        SampleFormat::I16 => build_stream::<i16>(&device, config, mixer, control),
+        SampleFormat::I32 => build_stream::<i32>(&device, config, mixer, control),
+        SampleFormat::U16 => build_stream::<u16>(&device, config, mixer, control),
         other => Err(format!("Unsupported output sample format {other}")),
     }
 }
@@ -475,7 +588,7 @@ fn build_stream<T: SizedSample + FromSample<f32>>(
     device: &cpal::Device,
     config: StreamConfig,
     mixer: Arc<Mutex<Mixer>>,
-    rebuild: mpsc::Sender<()>,
+    control: mpsc::Sender<Control>,
 ) -> Result<cpal::Stream, String> {
     let channels = config.channels as usize;
     let stream = device
@@ -492,7 +605,7 @@ fn build_stream<T: SizedSample + FromSample<f32>>(
                 eprintln!("audio: output stream error: {error}");
                 // A rerouted default device (DeviceChanged) keeps working; only a dead stream is rebuilt.
                 if matches!(error.kind(), ErrorKind::DeviceNotAvailable | ErrorKind::StreamInvalidated) {
-                    let _ = rebuild.send(());
+                    let _ = control.send(Control::Rebuild);
                 }
             },
             None,

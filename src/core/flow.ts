@@ -1,16 +1,22 @@
 // Flow that crosses modules: what focusing, activating and playing an entry means for the browser,
 // the search and the player together. Module stores stay unaware of each other; this file wires them.
 
+import { invoke } from "@tauri-apps/api/core";
 import { audioDir } from "@tauri-apps/api/path";
 import { launchPath, onOpenPath } from "../modules/browser/api";
 import { clampIndex, useBrowser, watchOpenFolder } from "../modules/browser/browserStore";
 import { classify, type BrowserEntry } from "../modules/browser/entries";
 import { useSearch } from "../modules/browser/searchStore";
+import { selectedEntries, useSelection } from "../modules/browser/selectionStore";
 import { prefetch } from "../modules/player/api";
 import { connectPlayer, usePlayer } from "../modules/player/playerStore";
-import { nameOf, parentOf, samePath } from "./paths";
+import { nameOf, parentOf, pathKey, samePath } from "./paths";
+import { t } from "./i18n";
 import { useSettings } from "./settingsStore";
 import { searchInput, useUi } from "./uiStore";
+
+/** The first folder is opened once per page load; StrictMode's second effect run must not redo it. */
+let initialFolderOpened = false;
 
 /** Files on each side of the cursor decoded ahead of time. */
 const prefetchRadius = 6;
@@ -45,7 +51,7 @@ export function useVisibleList(): VisibleList {
     : { entries, focusIndex: browserFocus, searching };
 }
 
-function setVisibleFocus(index: number) {
+export function setVisibleFocus(index: number) {
   if (visibleList().searching) {
     useSearch.getState().setFocus(index);
   } else {
@@ -57,7 +63,78 @@ export function playEntry(entry: BrowserEntry, from: BrowserEntry[]) {
   if (entry.kind !== "audio") {
     return;
   }
-  void usePlayer.getState().playFile(entry.path, audioPaths(from));
+  void usePlayer.getState().playFile(entry.path, groupPlaylist(from, entry));
+}
+
+/**
+ * What next/previous, repeat-group and shuffle walk through: the selected audio files when the
+ * track is one of them, otherwise every audio file of the list.
+ */
+function groupPlaylist(entries: BrowserEntry[], playing: BrowserEntry | null): string[] {
+  const { selected } = useSelection.getState();
+  const group = audioPaths(selectedEntries(entries, selected));
+  const inGroup = playing === null || selected.has(pathKey(playing.path));
+
+  return group.length > 0 && inGroup ? group : audioPaths(entries);
+}
+
+export interface PressModifiers {
+  ctrl: boolean;
+  shift: boolean;
+}
+
+/**
+ * A click on a row. Plain: focus (and play, with play-on-focus), dropping the selection.
+ * Ctrl toggles the row in the selection, Shift selects the range from the anchor. Modifier clicks
+ * never play: picking a group must not fire every file on the way.
+ */
+export function pressEntry(index: number, modifiers: PressModifiers) {
+  const { entries, focusIndex } = visibleList();
+  const selection = useSelection.getState();
+  if (modifiers.shift) {
+    selection.selectRange(entries, selection.anchor ?? focusIndex, index);
+    setVisibleFocus(index);
+  } else if (modifiers.ctrl) {
+    selection.toggle(entries, index);
+    setVisibleFocus(index);
+  } else {
+    selection.clear();
+    focusByUser(index, true);
+  }
+}
+
+/** Shift+arrows: move the cursor and select from the anchor to it. */
+export function extendSelectionTo(index: number) {
+  const { entries, focusIndex } = visibleList();
+  const target = clampIndex(index, entries.length);
+  const selection = useSelection.getState();
+  const anchor = selection.anchor ?? focusIndex;
+  selection.selectRange(entries, anchor, target);
+  setVisibleFocus(target);
+}
+
+export function toggleFocusedInSelection() {
+  const { entries, focusIndex } = visibleList();
+  useSelection.getState().toggle(entries, focusIndex);
+}
+
+export function selectAllVisible() {
+  useSelection.getState().selectAll(visibleList().entries);
+}
+
+/** Files a drag out of the list carries: the whole selection if the row is in it, else the row. */
+export function dragPaths(index: number): string[] {
+  const { entries } = visibleList();
+  const entry = entries[index];
+  if (!entry) {
+    return [];
+  }
+  const { selected } = useSelection.getState();
+  if (selected.has(pathKey(entry.path))) {
+    return selectedEntries(entries, selected).map((item) => item.path);
+  }
+
+  return [entry.path];
 }
 
 function audioPaths(entries: BrowserEntry[]): string[] {
@@ -148,6 +225,13 @@ export async function openPath(path: string, focusPath?: string) {
   await open(path, focusPath);
 }
 
+function currentListIdentity(): string {
+  const search = useSearch.getState();
+  const searching = search.active && search.query.trim() !== "";
+
+  return searching ? `search:${search.query}` : `dir:${useBrowser.getState().dir ?? ""}`;
+}
+
 function prefetchAroundFocus() {
   const { entries, focusIndex } = visibleList();
   const paths: string[] = [];
@@ -165,6 +249,15 @@ function prefetchAroundFocus() {
 /** Starts everything that lives for the whole session. Returns the cleanup. */
 export function startApp(): () => void {
   const stopPlayer = connectPlayer();
+
+  // The tray menu is native; its labels follow the UI language.
+  const applyTrayLabels = () => void invoke("set_tray_labels", { show: t().trayShow, quit: t().trayQuit });
+  applyTrayLabels();
+  const stopLanguage = useSettings.subscribe((state, previous) => {
+    if (state.language !== previous.language) {
+      applyTrayLabels();
+    }
+  });
   const stopWatching = watchOpenFolder();
   const stopOpenPath = onOpenPath((path) => {
     // The native window is brought forward by Rust; the page needs focus too, or arrows do nothing.
@@ -186,6 +279,32 @@ export function startApp(): () => void {
     }
   });
 
+  // A selection belongs to one list: another folder or another search starts without one.
+  // A live reload keeps it (same folder, selection is keyed by path).
+  let listIdentity = currentListIdentity();
+  const onListChange = () => {
+    const identity = currentListIdentity();
+    if (identity !== listIdentity) {
+      listIdentity = identity;
+      useSelection.getState().clear();
+    }
+  };
+  const stopBrowserIdentity = useBrowser.subscribe(onListChange);
+  const stopSearchIdentity = useSearch.subscribe(onListChange);
+
+  // Selecting while something plays re-targets repeat-group and next/previous at once.
+  const stopSelection = useSelection.subscribe((state, previous) => {
+    const track = usePlayer.getState().track;
+    if (state.selected === previous.selected || !track) {
+      return;
+    }
+    const { entries } = visibleList();
+    const playing = entries.find((entry) => samePath(entry.path, track.path));
+    if (playing) {
+      usePlayer.getState().setPlaylist(groupPlaylist(entries, playing));
+    }
+  });
+
   const stopBrowserPrefetch = useBrowser.subscribe((state, previous) => {
     if (state.entries !== previous.entries || state.focusIndex !== previous.focusIndex) {
       prefetchAroundFocus();
@@ -198,7 +317,13 @@ export function startApp(): () => void {
   });
 
   // Start where the app was pointed ("Open with", a path argument), otherwise in the Music folder.
+  // Done once: a second concurrent start would supersede the first listing, which then looks
+  // failed and falls back to the drives list.
   void (async () => {
+    if (initialFolderOpened) {
+      return;
+    }
+    initialFolderOpened = true;
     const launched = await launchPath();
     if (launched) {
       await openPath(launched);
@@ -213,9 +338,13 @@ export function startApp(): () => void {
 
   return () => {
     stopPlayer();
+    stopLanguage();
     stopTrack();
     stopBrowserPrefetch();
     stopSearchPrefetch();
+    stopBrowserIdentity();
+    stopSearchIdentity();
+    stopSelection();
     void stopWatching.then((stop) => stop());
     void stopOpenPath.then((stop) => stop());
   };

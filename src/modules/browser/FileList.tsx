@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Text } from "@mantine/core";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { samePath } from "../../core/paths";
+import { pathKey, samePath } from "../../core/paths";
 import type { BrowserEntry } from "./entries";
 import { FileRow } from "./FileRow";
 import classes from "./FileList.module.css";
@@ -16,10 +16,18 @@ interface FileListProps {
   zoneActive: boolean;
   currentPath: string | null;
   playing: boolean;
-  /** Files played since the folder was opened; shown slightly dimmed. */
+  /** `pathKey`s of files played this session; shown slightly dimmed. */
   played: ReadonlySet<string>;
+  /** `pathKey`s of the selection (the group). */
+  selected: ReadonlySet<string>;
   emptyText: string;
-  onFocus: (index: number) => void;
+  onPress: (index: number, modifiers: { ctrl: boolean; shift: boolean }) => void;
+  getDragPaths: (index: number) => string[];
+  /** `index` is null for the empty space around the rows. */
+  onContextMenu: (index: number | null, x: number, y: number) => void;
+  /** `pathKey` of the row being renamed in place. */
+  renamingKey: string | null;
+  onRenameDone: (index: number, newName: string | null) => void;
   onActivate: (index: number) => void;
   onPlay: (index: number) => void;
 }
@@ -32,8 +40,13 @@ export function FileList({
   currentPath,
   playing,
   played,
+  selected,
   emptyText,
-  onFocus,
+  onPress,
+  getDragPaths,
+  onContextMenu,
+  renamingKey,
+  onRenameDone,
   onActivate,
   onPlay,
 }: FileListProps) {
@@ -59,18 +72,32 @@ export function FileList({
 
   if (entries.length === 0) {
     return (
-      <div className={classes.empty}>
+      <div
+        className={classes.empty}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          onContextMenu(null, event.clientX, event.clientY);
+        }}
+      >
         <Text c="dimmed">{emptyText}</Text>
       </div>
     );
   }
 
   return (
-    <div ref={scroller} className={classes.scroller}>
+    <div
+      ref={scroller}
+      className={classes.scroller}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        onContextMenu(null, event.clientX, event.clientY);
+      }}
+    >
       <div className={classes.content} style={{ height: virtualizer.getTotalSize() }}>
         {virtualizer.getVirtualItems().map((item) => {
           const entry = entries[item.index];
           const current = currentPath !== null && samePath(entry.path, currentPath);
+          const key = pathKey(entry.path);
 
           return (
             <div
@@ -84,8 +111,13 @@ export function FileList({
                 zoneActive={zoneActive}
                 current={current}
                 playing={current && playing}
-                played={played.has(entry.path)}
-                onFocus={() => onFocus(item.index)}
+                played={played.has(key)}
+                selected={selected.has(key)}
+                onPress={(modifiers) => onPress(item.index, modifiers)}
+                getDragPaths={() => getDragPaths(item.index)}
+                onContextMenu={(x, y) => onContextMenu(item.index, x, y)}
+                renaming={renamingKey === key}
+                onRenameDone={(newName) => onRenameDone(item.index, newName)}
                 onActivate={() => onActivate(item.index)}
                 onPlay={() => onPlay(item.index)}
               />

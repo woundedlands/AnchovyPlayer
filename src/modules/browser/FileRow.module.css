@@ -14,6 +14,15 @@
   background: var(--app-raised);
 }
 
+/* Part of the selection (the group): a tint of the accent, distinct from the cursor. */
+.row[data-selected] {
+  background: color-mix(in srgb, var(--app-accent) 14%, transparent);
+}
+
+.row[data-selected] .icon {
+  color: var(--app-accent);
+}
+
 .row[data-focused] {
   background: var(--app-focus);
 }
@@ -23,10 +32,18 @@
   box-shadow: inset 3px 0 0 var(--app-accent);
 }
 
+/* The cursor on a selected row must not hide that the row is selected. */
+.row[data-focused][data-selected] {
+  background: color-mix(in srgb, var(--app-accent) 24%, transparent);
+}
+
 .icon {
   display: flex;
   flex: none;
   color: var(--app-text-dim);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
 }
 
 .row[data-kind="dir"] .icon {
@@ -36,6 +53,30 @@
 .row[data-current] .icon,
 .row[data-current] .name {
   color: var(--app-accent);
+}
+
+/* Icon and play button share one cell and cross-fade. */
+.lead {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+}
+
+.renameInput {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  font: inherit;
+  color: var(--app-text);
+  background: var(--app-bg);
+  border: 1px solid var(--app-accent);
+  border-radius: var(--mantine-radius-sm);
+  outline: none;
 }
 
 /* Already heard in this visit to the folder: a touch greyer, still easy to read. */
@@ -64,13 +105,28 @@
 }
 
 .play {
-  flex: none;
+  position: absolute;
+  inset: 0;
+  margin: auto;
   opacity: 0;
-  transition: opacity 80ms ease;
+  transform: scale(0.6);
+  pointer-events: none;
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
 }
 
-.row:hover .play,
-.row[data-focused] .play,
-.row[data-current] .play {
+.row[data-kind="audio"]:hover .play,
+.row[data-kind="audio"][data-focused] .play,
+.row[data-kind="audio"][data-current] .play {
   opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+
+.row[data-kind="audio"]:hover .icon,
+.row[data-kind="audio"][data-focused] .icon,
+.row[data-kind="audio"][data-current] .icon {
+  opacity: 0;
+  transform: scale(0.6);
 }

@@ -1,9 +1,10 @@
 mod audio;
 mod fs;
+mod tray;
 
 use std::path::{Path, PathBuf};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::path::BaseDirectory;
@@ -12,7 +13,14 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use audio::{Engine, PlaybackStatus, TrackInfo, Waveform};
 use fs::{DirEntry, FolderWatcher, WalkEntry};
 
+/// Status polling while something plays: one display frame, for a smooth playhead.
 const STATUS_INTERVAL: Duration = Duration::from_millis(16);
+/// Polling while idle or paused. Any player command wakes the poller at once, so this only
+/// bounds how late an external change (a device switch) shows up.
+const IDLE_STATUS_INTERVAL: Duration = Duration::from_millis(250);
+/// After a command the mixer applies it on its next buffer; poll fast meanwhile so the new
+/// state is reported at once rather than one idle interval later.
+const AFTER_COMMAND_FAST_POLL: Duration = Duration::from_millis(500);
 const PLAYER_STATUS_EVENT: &str = "player-status";
 const FOLDER_CHANGED_EVENT: &str = "folder-changed";
 const OPEN_PATH_EVENT: &str = "open-path";
@@ -153,6 +161,42 @@ fn settings_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(dir.join(SETTINGS_FILE))
 }
 
+#[tauri::command]
+async fn rename_entry(path: String, new_name: String) -> Result<String, String> {
+    blocking(move || fs::ops::rename(Path::new(&path), &new_name).map(|p| p.to_string_lossy().into_owned())).await
+}
+
+#[tauri::command]
+async fn trash_entries(paths: Vec<String>) -> Result<(), String> {
+    blocking(move || fs::ops::move_to_trash(&paths.into_iter().map(PathBuf::from).collect::<Vec<_>>())).await
+}
+
+/// Copies (or moves, when `remove_source`) into `dest_dir`; returns the created paths.
+#[tauri::command]
+async fn transfer_entries(sources: Vec<String>, dest_dir: String, remove_source: bool) -> Result<Vec<String>, String> {
+    blocking(move || {
+        let sources: Vec<PathBuf> = sources.into_iter().map(PathBuf::from).collect();
+        let created = fs::ops::transfer(&sources, Path::new(&dest_dir), remove_source)?;
+        Ok(created.into_iter().map(|p| p.to_string_lossy().into_owned()).collect())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn clipboard_set_files(paths: Vec<String>, cut: bool) -> Result<(), String> {
+    blocking(move || fs::clipboard::set_files(&paths, cut)).await
+}
+
+#[tauri::command]
+async fn clipboard_get_files() -> Result<fs::clipboard::ClipboardFiles, String> {
+    blocking(fs::clipboard::get_files).await
+}
+
+#[tauri::command]
+async fn clipboard_clear() -> Result<(), String> {
+    blocking(fs::clipboard::clear).await
+}
+
 /// Image shown under the cursor while dragging a file out of the app.
 #[tauri::command]
 async fn drag_icon_path(app: AppHandle) -> Result<String, String> {
@@ -182,13 +226,21 @@ fn spawn_status_emitter(app: AppHandle, engine: Engine) {
         .name("player-status".into())
         .spawn(move || {
             let mut last: Option<PlaybackStatus> = None;
+            let mut fast_until = Instant::now();
             loop {
-                thread::sleep(STATUS_INTERVAL);
                 engine.restart_ended_stream_if_looping();
                 let status = engine.status();
                 if last != Some(status) {
                     let _ = app.emit(PLAYER_STATUS_EVENT, status);
                     last = Some(status);
+                }
+                let interval = if status.state == "playing" || Instant::now() < fast_until {
+                    STATUS_INTERVAL
+                } else {
+                    IDLE_STATUS_INTERVAL
+                };
+                if engine.wait_for_activity(interval) {
+                    fast_until = Instant::now() + AFTER_COMMAND_FAST_POLL;
                 }
             }
         })
@@ -203,13 +255,14 @@ pub fn run() {
             if let Some(path) = path_argument(args.into_iter().skip(1), Path::new(&cwd)) {
                 let _ = app.emit(OPEN_PATH_EVENT, path);
             }
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.unminimize();
-                let _ = window.set_focus();
-            }
+            // The window may be hidden in the tray.
+            tray::show_main_window(app);
         }))
         .plugin(tauri_plugin_drag::init())
+        .plugin(tauri_plugin_opener::init())
+        .on_window_event(tray::on_window_event)
         .setup(|app| {
+            tray::setup(app)?;
             let engine = Engine::start()?;
             spawn_status_emitter(app.handle().clone(), engine.clone());
             app.manage(engine);
@@ -232,6 +285,14 @@ pub fn run() {
             waveform,
             launch_path,
             drag_icon_path,
+            rename_entry,
+            trash_entries,
+            transfer_entries,
+            clipboard_set_files,
+            clipboard_get_files,
+            clipboard_clear,
+            tray::set_close_to_tray,
+            tray::set_tray_labels,
             load_settings,
             save_settings,
         ])

@@ -4,6 +4,9 @@
 mod cache;
 mod decode;
 mod output;
+mod waveform;
+
+pub use waveform::Waveform;
 
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
@@ -25,7 +28,6 @@ const WAVEFORM_CACHE_BYTES: usize = 64 * 1024 * 1024;
 const STREAM_BUFFER_SECONDS: usize = 2;
 const STREAM_REFILL_WAIT: Duration = Duration::from_millis(5);
 const PREFETCH_WORKERS: usize = 2;
-const WAVEFORM_BINS: usize = 2048;
 
 #[derive(Serialize, Clone, Copy, PartialEq, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -42,16 +44,6 @@ pub struct PlaybackStatus {
 pub struct TrackInfo {
     pub voice_id: u64,
     pub duration: f64,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Waveform {
-    pub channels: usize,
-    pub duration: f64,
-    /// Per channel, `bins` pairs of (min, max), channel after channel.
-    pub peaks: Vec<f32>,
-    pub bins: usize,
 }
 
 enum TrackSource {
@@ -203,6 +195,11 @@ impl Engine {
         self.0.waveforms.lock().expect("waveform cache poisoned").remove(path);
     }
 
+    /// Sleeps until the player is told to do something or `timeout` passes; true when woken.
+    pub fn wait_for_activity(&self, timeout: Duration) -> bool {
+        self.0.output.wait_for_activity(timeout)
+    }
+
     pub fn status(&self) -> PlaybackStatus {
         let inner = &self.0;
         let status = &inner.output.status;
@@ -253,23 +250,8 @@ impl Engine {
         let rate = inner.output.status.sample_rate();
         let cached_clip = inner.clips.lock().expect("clip cache poisoned").get(path, stamp, rate);
         let waveform = match cached_clip {
-            Some(clip) => {
-                let mut reducer = PeakReducer::new();
-                reducer.push(&clip.samples);
-                reducer.finish(clip.source_channels, clip.frames() as f64 / rate as f64)
-            }
-            None => {
-                // Source rate, no resampling: the shape is all that matters and this is much faster.
-                let mut decoder = TrackDecoder::open(path, None)?;
-                let mut reducer = PeakReducer::new();
-                let mut chunk = Vec::new();
-                while decoder.next_chunk(&mut chunk) {
-                    reducer.push(&chunk);
-                    chunk.clear();
-                }
-                let duration = reducer.frames as f64 / decoder.output_rate().max(1) as f64;
-                reducer.finish(decoder.source_channels(), duration)
-            }
+            Some(clip) => waveform::from_samples(&clip.samples, clip.source_channels, clip.frames() as f64 / rate as f64),
+            None => waveform::from_file(path)?,
         };
         let waveform = Arc::new(waveform);
         let bytes = waveform.peaks.len() * size_of::<f32>();
@@ -371,77 +353,3 @@ fn run_prefetch_worker(inner: &Inner) {
     }
 }
 
-/// Min/max peaks for a stream of unknown length. Blocks start one frame long; whenever there are
-/// twice as many as needed, neighbours are merged and the block length doubles. A 40 ms click keeps
-/// per-sample detail, an hour-long mix stays at a few thousand blocks.
-struct PeakReducer {
-    blocks: Vec<[f32; 4]>,
-    block_frames: usize,
-    current: [f32; 4],
-    in_block: usize,
-    frames: u64,
-}
-
-impl PeakReducer {
-    fn new() -> Self {
-        Self { blocks: Vec::new(), block_frames: 1, current: EMPTY_PEAK, in_block: 0, frames: 0 }
-    }
-
-    fn push(&mut self, interleaved: &[f32]) {
-        for frame in interleaved.chunks_exact(CHANNELS) {
-            let peak = &mut self.current;
-            peak[0] = peak[0].min(frame[0]);
-            peak[1] = peak[1].max(frame[0]);
-            peak[2] = peak[2].min(frame[1]);
-            peak[3] = peak[3].max(frame[1]);
-            self.in_block += 1;
-            if self.in_block == self.block_frames {
-                self.blocks.push(self.current);
-                self.current = EMPTY_PEAK;
-                self.in_block = 0;
-                if self.blocks.len() == WAVEFORM_BINS * 2 {
-                    self.halve();
-                }
-            }
-        }
-        self.frames += (interleaved.len() / CHANNELS) as u64;
-    }
-
-    fn halve(&mut self) {
-        let merged: Vec<[f32; 4]> = self.blocks.chunks(2).map(|pair| merge_peaks(pair)).collect();
-        self.blocks = merged;
-        self.block_frames *= 2;
-    }
-
-    fn finish(mut self, source_channels: usize, duration: f64) -> Waveform {
-        if self.in_block > 0 {
-            self.blocks.push(self.current);
-        }
-        let channels = source_channels.clamp(1, CHANNELS);
-        let bins = WAVEFORM_BINS.min(self.blocks.len()).max(1);
-        let mut peaks = vec![0.0; channels * bins * 2];
-        for bin in 0..bins {
-            let from = bin * self.blocks.len() / bins;
-            let to = ((bin + 1) * self.blocks.len() / bins).max(from + 1).min(self.blocks.len());
-            let mut merged = merge_peaks(&self.blocks[from.min(to)..to]);
-            if merged[0] > merged[1] {
-                merged = [0.0; 4];
-            }
-            for channel in 0..channels {
-                let at = (channel * bins + bin) * 2;
-                peaks[at] = merged[channel * 2];
-                peaks[at + 1] = merged[channel * 2 + 1];
-            }
-        }
-
-        Waveform { channels, duration, peaks, bins }
-    }
-}
-
-const EMPTY_PEAK: [f32; 4] = [f32::MAX, f32::MIN, f32::MAX, f32::MIN];
-
-fn merge_peaks(blocks: &[[f32; 4]]) -> [f32; 4] {
-    blocks.iter().fold(EMPTY_PEAK, |merged, block| {
-        [merged[0].min(block[0]), merged[1].max(block[1]), merged[2].min(block[2]), merged[3].max(block[3])]
-    })
-}

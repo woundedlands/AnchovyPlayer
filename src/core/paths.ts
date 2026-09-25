@@ -57,10 +57,15 @@ export function normalizePath(path: string): string {
 }
 
 export function samePath(a: string, b: string): boolean {
-  // Windows paths are case-insensitive; comparing them case-sensitively would lose focus after a rename of case only.
-  const caseInsensitive = separatorOf(a) === "\\";
-  const left = normalizePath(a);
-  const right = normalizePath(b);
+  return pathKey(a) === pathKey(b);
+}
 
-  return caseInsensitive ? left.toLowerCase() === right.toLowerCase() : left === right;
+/**
+ * One key per file for sets and maps: normalised, and lower-cased on Windows where paths are
+ * case-insensitive (a path from Explorer and one from a listing may differ only in case).
+ */
+export function pathKey(path: string): string {
+  const normalized = normalizePath(path);
+
+  return separatorOf(path) === "\\" ? normalized.toLowerCase() : normalized;
 }

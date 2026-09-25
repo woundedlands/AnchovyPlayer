@@ -14,18 +14,10 @@ import {
 } from "@tabler/icons-react";
 import { nameOf, parentOf } from "../../core/paths";
 import { maxVolume, useSettings, type RepeatMode } from "../../core/settingsStore";
+import { useT, type Messages } from "../../core/i18n";
 import { usePlayer } from "./playerStore";
 import { Waveform } from "./Waveform";
 import classes from "./PlayerBar.module.css";
-
-/** One wheel notch; 5% steps feel like VLC. */
-export const volumeWheelStep = 0.05;
-
-const repeatLabels: Record<RepeatMode, string> = {
-  off: "Repeat off",
-  current: "Repeat current",
-  folder: "Repeat folder",
-};
 
 interface PlayerBarProps {
   active: boolean;
@@ -37,6 +29,7 @@ interface PlayerBarProps {
 export function PlayerBar({ active, onActivate, onTogglePlay }: PlayerBarProps) {
   const player = usePlayer();
   const settings = useSettings();
+  const t = useT();
   const { status, track, error } = player;
   const playing = status.state === "playing";
   const onCurrentVoice = track !== null && status.voiceId === track.voiceId;
@@ -49,10 +42,16 @@ export function PlayerBar({ active, onActivate, onTogglePlay }: PlayerBarProps) 
     <footer
       className={classes.root}
       data-active={active || undefined}
-      onPointerDown={onActivate}
+      onPointerDown={(event) => {
+        // Transport buttons and the volume slider are a remote control: they act without taking
+        // over the arrow keys, which stay with the file list.
+        if (!(event.target as Element).closest("button, .mantine-Slider-root")) {
+          onActivate();
+        }
+      }}
       onWheel={(event) => {
         event.stopPropagation();
-        player.changeVolume(event.deltaY < 0 ? volumeWheelStep : -volumeWheelStep);
+        player.stepVolume(event.deltaY < 0 ? 1 : -1);
       }}
     >
       <div className={classes.wave}>
@@ -68,17 +67,17 @@ export function PlayerBar({ active, onActivate, onTogglePlay }: PlayerBarProps) 
           ) : (
             <>
               <Text className={classes.title} truncate="end">
-                {track ? nameOf(track.path) : "Nothing playing"}
+                {track ? nameOf(track.path) : t.nothingPlaying}
               </Text>
               <Text className={classes.meta} truncate="end">
-                {track ? `${formatTime(position, duration)} / ${formatTime(duration, duration)} · ${parentOf(track.path) ?? ""}` : "Space plays the focused file"}
+                {track ? `${formatTime(position, duration)} / ${formatTime(duration, duration)} · ${parentOf(track.path) ?? ""}` : t.spaceHint}
               </Text>
             </>
           )}
         </div>
 
         <div className={classes.transport}>
-          <Tooltip label={settings.shuffle ? "Shuffle on" : "Shuffle off"}>
+          <Tooltip label={settings.shuffle ? t.shuffleOn : t.shuffleOff}>
             <ActionIcon
               variant="subtle"
               size="lg"
@@ -99,7 +98,7 @@ export function PlayerBar({ active, onActivate, onTogglePlay }: PlayerBarProps) 
           <ActionIcon variant="subtle" size="xl" radius="xl" color="gray" onClick={player.next}>
             <IconPlayerSkipForwardFilled size={22} />
           </ActionIcon>
-          <Tooltip label={`${repeatLabels[settings.repeat]} · Ctrl+R`}>
+          <Tooltip label={`${repeatLabel(settings.repeat, t)} · Ctrl+R`}>
             <ActionIcon
               variant="subtle"
               size="lg"
@@ -135,11 +134,22 @@ export function PlayerBar({ active, onActivate, onTogglePlay }: PlayerBarProps) 
   );
 }
 
+function repeatLabel(mode: RepeatMode, t: Messages): string {
+  if (mode === "current") {
+    return t.repeatCurrent;
+  }
+  if (mode === "group") {
+    return t.repeatGroup;
+  }
+
+  return t.repeatOff;
+}
+
 function RepeatIcon({ mode }: { mode: RepeatMode }) {
   if (mode === "current") {
     return <IconRepeatOnce size={20} />;
   }
-  if (mode === "folder") {
+  if (mode === "group") {
     return <IconRepeat size={20} />;
   }
 

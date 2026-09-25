@@ -1,8 +1,9 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { ActionIcon, TextInput, Tooltip, UnstyledButton } from "@mantine/core";
 import { IconArrowUp, IconChevronRight, IconDeviceDesktop } from "@tabler/icons-react";
-import { useElementSize } from "@mantine/hooks";
+import { useElementSize, useMergedRef } from "@mantine/hooks";
 import { joinSegments, nameOf, parentOf, separatorOf, splitPath } from "../../core/paths";
+import { useT } from "../../core/i18n";
 import { listDir } from "./api";
 import classes from "./PathBar.module.css";
 
@@ -23,8 +24,12 @@ export function PathBar({ dir, onNavigate, onUp, onDone }: PathBarProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [hiddenCount, setHiddenCount] = useState(0);
+  const t = useT();
   const { ref: crumbsFrame, width } = useElementSize();
   const crumbs = useRef<HTMLDivElement | null>(null);
+  // Must be a stable ref: an inline callback re-attaches every render, and each re-attach makes
+  // useElementSize start a new ResizeObserver whose first report re-renders - a per-frame loop.
+  const crumbsRef = useMergedRef(crumbs, crumbsFrame);
 
   const startEditing = () => {
     setDraft(dir ?? "");
@@ -63,7 +68,7 @@ export function PathBar({ dir, onNavigate, onUp, onDone }: PathBarProps) {
 
   return (
     <div className={classes.root}>
-      <Tooltip label="Parent folder · Left">
+      <Tooltip label={t.parentFolder}>
         <ActionIcon variant="subtle" color="gray" size="lg" radius="md" onClick={onUp} disabled={dir === null}>
           <IconArrowUp size={20} />
         </ActionIcon>
@@ -92,13 +97,10 @@ export function PathBar({ dir, onNavigate, onUp, onDone }: PathBarProps) {
         />
       ) : (
         <div
-          ref={(element) => {
-            crumbs.current = element;
-            crumbsFrame(element);
-          }}
+          ref={crumbsRef}
           className={classes.crumbs}
           onClick={startEditing}
-          title="Click to type a path"
+          title={t.clickToTypePath}
         >
           <UnstyledButton
             className={classes.crumb}

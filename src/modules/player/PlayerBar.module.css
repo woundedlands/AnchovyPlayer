@@ -49,7 +49,14 @@
 }
 
 .play {
+  background: var(--app-accent-gradient);
   box-shadow: var(--app-shadow);
+  transition: filter 120ms ease;
+}
+
+.play:hover {
+  background: var(--app-accent-gradient);
+  filter: brightness(1.06);
 }
 
 .toggle {

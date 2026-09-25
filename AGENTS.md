@@ -5,7 +5,7 @@ Anchovy Player - a minimalist desktop audio player built around an integrated fi
 # Project Structure
 
 1. `src/` - frontend (React). `src/main.tsx` is the entry point only.
-2. `src/core/` - the app shell and what every module relies on: providers, theme, settings, shared helpers. Its shell files (`App.tsx`, `flow.ts` for cross-module flow, `keyboard.ts`) are the only core code that imports modules.
+2. `src/core/` - the app shell and what every module relies on: providers, theme, settings, i18n, shared helpers. Its shell files (`App.tsx`, `flow.ts` for cross-module flow, `keyboard.ts`, `fileActions.ts` and `EntryMenu.tsx` for file operations) are the only core code that imports modules.
 3. `src/modules/<Module>/` - one folder per module (browser, player...). Store, components, styles and backend call wrappers of a module live together. Modules never import each other; what connects them lives in `core/flow.ts`.
 4. `src-tauri/src/` - backend (Rust). One module per subsystem (`audio/`, `fs/`...). Tauri commands are thin wrappers that call into modules; logic does not live in command handlers.
 5. **Domain logic and all flow live in TypeScript.** Rust provides only primitives TypeScript cannot do or should not own: the audio engine (decode, play, seek, loop, cache, prefetch, waveform peaks), filesystem primitives (list, watch, recursive walk), drag-out and shell integration. Navigation, focus, playback order, repeat/shuffle, search matching, format classification and sorting are TypeScript. When unsure where something goes, it goes to TypeScript.
@@ -20,7 +20,7 @@ Anchovy Player - a minimalist desktop audio player built around an integrated fi
 4. **If code can enforce it, write code, not a doc line.**
 5. When something changes, rewrite the sentence that is now wrong instead of appending a newer one. Remove what no longer makes sense.
 6. Anything you delete or rename that a dev.md mentions - grep the dev.md files in the same change.
-7. All docs, comments and UI text are English only.
+7. All docs and comments are English only. UI text is never written inline: it goes through `core/i18n.ts` (English reference + Russian), and TypeScript rejects a language missing a key.
 
 # Skills
 
@@ -35,7 +35,8 @@ Anchovy Player - a minimalist desktop audio player built around an integrated fi
 5. Required things are not optional: if something expected is missing, fail loudly with an error naming the cause. No warning-and-continue, no silent null. The exception is user content - an unreadable or unsupported file is normal and must be shown as such in the UI, never crash or stall navigation.
 6. Tokens are not infinite. Avoid microfix->screenshot loops and giantfix->no test.
 7. Latency and feel are judged by a person using the app, not by green tests. Run checks as a smoke test and let the user verify.
-8. Checks before handing off: `npm run typecheck` and `cargo check` (in `src-tauri`). Run the app with `npm run tauri dev`.
+8. Checks before handing off: `npm run typecheck`, `cargo check` and `cargo test --lib` (in `src-tauri`). Run the app with `npm run dev` (picks a free port for the dev server; see dev.md).
+9. **Never drive the real mouse or keyboard** (SendKeys, synthetic clicks) to test the app: the desktop is shared with the user and the input lands in whatever they are doing. Observe passively - window screenshots, logs, page console forwarded to the Vite log - and ask the user to try interactions.
 
 # Libs installed
 
@@ -45,7 +46,8 @@ Reach for these before adding a dependency or writing your own.
 2. Tabler icons (`@tabler/icons-react`) - the only icon set.
 3. cpal - audio output.
 4. symphonia + symphonia-adapter-libopus - decoding. Formats and what is not covered are in dev.md.
-5. zustand - app state. One store per module (`<module>Store.ts`) plus `core/settingsStore.ts`. Components select only what they render; non-React code uses `getState()`. No `persist` middleware: see settings below.
+5. trash - moving files to the recycle bin. clipboard-win (Windows only) - files on the system clipboard, Explorer-compatible. tauri-plugin-opener - "Show in Explorer".
+6. zustand - app state. One store per module (`<module>Store.ts`) plus `core/settingsStore.ts`. Components select only what they render; non-React code uses `getState()`. No `persist` middleware: see settings below.
 
 # Persistent data
 

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { parentOf, samePath } from "../../core/paths";
+import { parentOf, pathKey, samePath } from "../../core/paths";
 import { listDir, listRoots, onFolderChanged, watchDir } from "./api";
 import { toBrowserEntries, type BrowserEntry } from "./entries";
 
@@ -13,7 +13,7 @@ interface BrowserState {
   entries: BrowserEntry[];
   focusIndex: number;
   error: string | null;
-  /** Files played since this folder was opened; shown dimmed. Reset when another folder opens. */
+  /** `pathKey`s of files played this session; shown dimmed. Kept in memory only, never saved. */
   played: ReadonlySet<string>;
   /** Resolves to the new listing, or null if it failed or a newer navigation superseded it. */
   open: (path: string | null, focusPath?: string) => Promise<BrowserEntry[] | null>;
@@ -50,14 +50,11 @@ export const useBrowser = create<BrowserState>()((set, get) => ({
       const focused = focusPath === undefined ? -1 : next.findIndex((entry) => samePath(entry.path, focusPath));
       // Without a remembered item, start on the first real entry rather than on "..".
       const firstReal = next.length > 1 && next[0].kind === "parent" ? 1 : 0;
-      const current = get().dir;
-      const sameFolder = current !== null && path !== null && samePath(current, path);
       set({
         dir: path,
         entries: next,
         focusIndex: focused >= 0 && next[focused].kind !== "parent" ? focused : firstReal,
         error: null,
-        played: sameFolder ? get().played : new Set(),
       });
       if (path !== null) {
         watchDir(path).catch((watchError) => console.warn(`Live reload is off for ${path}: ${watchError}`));
@@ -86,8 +83,9 @@ export const useBrowser = create<BrowserState>()((set, get) => ({
 
   markPlayed: (path) => {
     const played = get().played;
-    if (!played.has(path)) {
-      set({ played: new Set(played).add(path) });
+    const key = pathKey(path);
+    if (!played.has(key)) {
+      set({ played: new Set(played).add(key) });
     }
   },
 }));
