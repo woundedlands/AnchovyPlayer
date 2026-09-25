@@ -68,9 +68,9 @@ async fn watch_dir(app: AppHandle, watcher: State<'_, FolderWatcher>, path: Stri
 }
 
 #[tauri::command]
-async fn play(engine: State<'_, Engine>, path: String) -> Result<TrackInfo, String> {
+async fn play(engine: State<'_, Engine>, path: String, start_seconds: Option<f64>) -> Result<TrackInfo, String> {
     let engine = engine.inner().clone();
-    blocking(move || engine.play(Path::new(&path))).await
+    blocking(move || engine.play(Path::new(&path), start_seconds.unwrap_or(0.0))).await
 }
 
 #[tauri::command]
@@ -129,36 +129,62 @@ async fn waveform(engine: State<'_, Engine>, path: String) -> Result<Waveform, S
 }
 
 const SETTINGS_FILE: &str = "settings.json";
+/// State the app keeps between runs (last folder, resume positions), apart from the preferences.
+const SESSION_FILE: &str = "session.json";
 
 /// Raw contents of settings.json, or None on first run. The schema and validation live in TypeScript.
 #[tauri::command]
 async fn load_settings(app: AppHandle) -> Result<Option<String>, String> {
-    let path = settings_path(&app)?;
-    match std::fs::read_to_string(&path) {
+    read_optional(&app_file(&app, SETTINGS_FILE)?)
+}
+
+#[tauri::command]
+async fn save_settings(app: AppHandle, contents: String) -> Result<(), String> {
+    write_atomically(&app_file(&app, SETTINGS_FILE)?, &contents)
+}
+
+#[tauri::command]
+async fn load_session(app: AppHandle) -> Result<Option<String>, String> {
+    read_optional(&app_file(&app, SESSION_FILE)?)
+}
+
+#[tauri::command]
+async fn save_session(app: AppHandle, contents: String) -> Result<(), String> {
+    write_atomically(&app_file(&app, SESSION_FILE)?, &contents)
+}
+
+fn app_file(app: &AppHandle, name: &str) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|e| format!("No config folder for {name}: {e}"))?;
+
+    Ok(dir.join(name))
+}
+
+/// None when the file does not exist yet (first run).
+fn read_optional(path: &Path) -> Result<Option<String>, String> {
+    match std::fs::read_to_string(path) {
         Ok(text) => Ok(Some(text)),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(error) => Err(format!("Cannot read {}: {error}", path.display())),
     }
 }
 
-/// Writes through a temporary file and a rename, so a crash mid-write never leaves half a settings file.
-#[tauri::command]
-async fn save_settings(app: AppHandle, contents: String) -> Result<(), String> {
-    let path = settings_path(&app)?;
-    let dir = path.parent().expect("settings path has a parent");
+/// Writes through a temporary file and a rename, so a crash mid-write never leaves half a file.
+fn write_atomically(path: &Path, contents: &str) -> Result<(), String> {
+    let dir = path.parent().expect("app file path has a parent");
     std::fs::create_dir_all(dir).map_err(|e| format!("Cannot create {}: {e}", dir.display()))?;
     let temporary = path.with_extension("json.tmp");
     std::fs::write(&temporary, contents).map_err(|e| format!("Cannot write {}: {e}", temporary.display()))?;
-    std::fs::rename(&temporary, &path).map_err(|e| format!("Cannot replace {}: {e}", path.display()))
+    std::fs::rename(&temporary, path).map_err(|e| format!("Cannot replace {}: {e}", path.display()))
 }
 
-fn settings_path(app: &AppHandle) -> Result<PathBuf, String> {
-    let dir = app
-        .path()
-        .app_config_dir()
-        .map_err(|e| format!("No config folder for settings: {e}"))?;
-
-    Ok(dir.join(SETTINGS_FILE))
+/// Anonymous identity of a file's content (see waveform_store::fingerprint): keys resume positions
+/// without storing names or paths.
+#[tauri::command]
+async fn file_fingerprint(path: String) -> Result<String, String> {
+    blocking(move || audio::fingerprint(Path::new(&path))).await
 }
 
 #[tauri::command]
@@ -297,6 +323,9 @@ pub fn run() {
             tray::set_tray_labels,
             load_settings,
             save_settings,
+            load_session,
+            save_session,
+            file_fingerprint,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

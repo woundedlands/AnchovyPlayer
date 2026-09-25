@@ -30,6 +30,8 @@ pub struct WalkEntry {
     /// Path below the walk root, with `/` separators on every platform.
     pub relative: String,
     pub is_dir: bool,
+    pub size: u64,
+    pub modified_ms: f64,
 }
 
 pub fn list_dir(path: &Path) -> Result<Vec<DirEntry>, String> {
@@ -43,11 +45,7 @@ pub fn list_dir(path: &Path) -> Result<Vec<DirEntry>, String> {
         if is_hidden(&entry.path(), &meta) {
             continue;
         }
-        let modified_ms = meta
-            .modified()
-            .ok()
-            .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
-            .map_or(0.0, |since| since.as_millis() as f64);
+        let modified_ms = modified_ms(&meta);
         listed.push(DirEntry {
             name: entry.file_name().to_string_lossy().into_owned(),
             path: entry.path().to_string_lossy().into_owned(),
@@ -88,7 +86,13 @@ pub fn walk(root: &Path, limit: usize) -> Result<Vec<WalkEntry>, String> {
             if meta.is_dir() {
                 pending.push(path.clone());
             }
-            found.push(WalkEntry { path: path.to_string_lossy().into_owned(), relative, is_dir: meta.is_dir() });
+            found.push(WalkEntry {
+                path: path.to_string_lossy().into_owned(),
+                relative,
+                is_dir: meta.is_dir(),
+                size: meta.len(),
+                modified_ms: modified_ms(&meta),
+            });
             if found.len() >= limit {
                 return Ok(found);
             }
@@ -111,6 +115,13 @@ pub fn list_roots() -> Vec<String> {
     {
         vec!["/".to_string()]
     }
+}
+
+fn modified_ms(meta: &std::fs::Metadata) -> f64 {
+    meta.modified()
+        .ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .map_or(0.0, |since| since.as_millis() as f64)
 }
 
 fn is_hidden(path: &Path, meta: &std::fs::Metadata) -> bool {

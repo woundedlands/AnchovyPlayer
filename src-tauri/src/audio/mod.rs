@@ -8,6 +8,7 @@ mod waveform;
 mod waveform_store;
 
 pub use waveform::Waveform;
+pub use waveform_store::fingerprint;
 
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
@@ -113,7 +114,8 @@ impl Engine {
         Ok(Self(inner))
     }
 
-    pub fn play(&self, path: &Path) -> Result<TrackInfo, String> {
+    /// Starts `path` at `start_seconds` (resuming a long track starts there, not at 0 then jumps).
+    pub fn play(&self, path: &Path, start_seconds: f64) -> Result<TrackInfo, String> {
         let inner = &self.0;
         let voice_id = inner.next_voice_id.fetch_add(1, Ordering::Relaxed);
         let rate = inner.output.status.sample_rate();
@@ -134,7 +136,12 @@ impl Engine {
                         (TrackSource::Clip(clip), duration)
                     }
                     duration => {
-                        let voice = spawn_stream(decoder, voice_id, 0)?;
+                        let mut decoder = decoder;
+                        let start_frame = (start_seconds.max(0.0) * rate as f64) as u64;
+                        if start_frame > 0 {
+                            decoder.seek(start_seconds)?;
+                        }
+                        let voice = spawn_stream(decoder, voice_id, start_frame)?;
                         inner.output.send(Command::Play { voice, paused: false });
                         (TrackSource::Stream, duration.unwrap_or(0.0))
                     }
@@ -142,7 +149,8 @@ impl Engine {
             }
         };
         if let TrackSource::Clip(clip) = &source {
-            let voice = Voice::Clip { id: voice_id, clip: clip.clone(), position: 0 };
+            let position = ((start_seconds.max(0.0) * rate as f64) as usize).min(clip.frames());
+            let voice = Voice::Clip { id: voice_id, clip: clip.clone(), position };
             inner.output.send(Command::Play { voice, paused: false });
         }
         *inner.track.lock().expect("track lock poisoned") =

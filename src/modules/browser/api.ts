@@ -13,6 +13,8 @@ export interface WalkEntry {
   path: string;
   relative: string;
   isDir: boolean;
+  size: number;
+  modifiedMs: number;
 }
 
 export interface FolderChanged {

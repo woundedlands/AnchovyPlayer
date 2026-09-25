@@ -5,7 +5,7 @@ Anchovy Player - a minimalist desktop audio player built around an integrated fi
 # Project Structure
 
 1. `src/` - frontend (React). `src/main.tsx` is the entry point only.
-2. `src/core/` - the app shell and what every module relies on: providers, theme, settings, i18n, shared helpers. Its shell files (`App.tsx`, `flow.ts` for cross-module flow, `keyboard.ts`, `fileActions.ts` and `EntryMenu.tsx` for file operations) are the only core code that imports modules.
+2. `src/core/` - the app shell and what every module relies on: providers, theme, settings, i18n, shared helpers. Its shell files (`App.tsx`, `flow.ts` for cross-module flow, `keyboard.ts`, `fileActions.ts` and `EntryMenu.tsx` for file operations, `resume.ts` for what survives a restart) are the only core code that imports modules.
 3. `src/modules/<Module>/` - one folder per module (browser, player...). Store, components, styles and backend call wrappers of a module live together. Modules never import each other; what connects them lives in `core/flow.ts`.
 4. `src-tauri/src/` - backend (Rust). One module per subsystem (`audio/`, `fs/`...). Tauri commands are thin wrappers that call into modules; logic does not live in command handlers.
 5. **Domain logic and all flow live in TypeScript.** Rust provides only primitives TypeScript cannot do or should not own: the audio engine (decode, play, seek, loop, cache, prefetch, waveform peaks), filesystem primitives (list, watch, recursive walk), drag-out and shell integration. Navigation, focus, playback order, repeat/shuffle, search matching, format classification and sorting are TypeScript. When unsure where something goes, it goes to TypeScript.
@@ -51,5 +51,6 @@ Reach for these before adding a dependency or writing your own.
 
 # Persistent data
 
-1. Preferences live in `settings.json` in the app config folder, written by `core/settingsStore.ts` through the `load_settings` / `save_settings` commands. Nothing persistent goes to localStorage.
-2. Keep the file **flat**: one key per preference, each with its own default. Parsing is field by field - an invalid or missing value falls back to its default without touching the rest, unknown keys are dropped. Bump the file `version` only when a key changes meaning.
+1. Preferences live in `settings.json` in the app config folder, written by `core/settingsStore.ts` through the `load_settings` / `save_settings` commands. State kept between runs (last folder, resume positions) lives next to it in `session.json` (`core/sessionStore.ts`). Nothing persistent goes to localStorage.
+2. Nothing persisted names what the user listened to unless it has to: resume positions are keyed by the content fingerprint. The last folder is a path because it must be reopened; turning its setting off erases it.
+3. Keep the settings file **flat**: one key per preference, each with its own default. Parsing is field by field - an invalid or missing value falls back to its default without touching the rest, unknown keys are dropped. Bump the file `version` only when a key changes meaning.

@@ -62,6 +62,12 @@ const seekSettleMs = 400;
 const seekArrivedSeconds = 0.3;
 /** The current track was opened from Explorer: no repeat until the user starts playback themselves. */
 let oneShot = false;
+/** Where a track starts (resume); set by the app so the player need not know how positions are kept. */
+let startResolver: ((path: string) => Promise<number | null>) | null = null;
+
+export function setStartResolver(resolver: ((path: string) => Promise<number | null>) | null) {
+  startResolver = resolver;
+}
 
 /** Gapless repeat-current is looped by the engine; everything else is scheduled here. */
 function engineLooping(): boolean {
@@ -98,7 +104,8 @@ export const usePlayer = create<PlayerState>()((set, get) => {
       try {
         // Awaited first: a 40 ms clip would otherwise loop once before a late "no looping" arrives.
         await api.setLooping(engineLooping());
-        const info = await api.play(path);
+        const startAt = startResolver ? await startResolver(path).catch(() => null) : null;
+        const info = await api.play(path, startAt ?? undefined);
         set({ track: { path, voiceId: info.voiceId }, error: null });
         // A 40 ms clip can finish before play() returns; its end event then arrived while the store
         // still held the previous track and was ignored. No further status event follows, so check now.

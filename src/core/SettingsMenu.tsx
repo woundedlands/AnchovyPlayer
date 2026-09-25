@@ -14,7 +14,7 @@ import {
 import { IconCheck, IconSettings } from "@tabler/icons-react";
 import { useT, type LanguageSetting, type Messages } from "./i18n";
 import { accentPresets } from "./palette";
-import { maxTrackGapMs, trackGapStepMs, useSettings } from "./settingsStore";
+import { maxTrackGapMs, resumeThresholds, trackGapStepMs, useSettings } from "./settingsStore";
 import classes from "./SettingsMenu.module.css";
 
 export function SettingsMenu() {
@@ -43,6 +43,33 @@ export function SettingsMenu() {
           checked={settings.closeToTray}
           onChange={(event) => settings.update({ closeToTray: event.currentTarget.checked })}
         />
+        <Switch
+          label={t.reopenLastFolder}
+          description={t.reopenLastFolderHint}
+          checked={settings.reopenLastFolder}
+          onChange={(event) => settings.update({ reopenLastFolder: event.currentTarget.checked })}
+        />
+        <div>
+          <Group justify="space-between">
+            <Text size="sm">{t.resume}</Text>
+            <Text size="sm" c="dimmed">
+              {resumeLabel(settings.resumeMinSeconds, t)}
+            </Text>
+          </Group>
+          <Text size="xs" c="dimmed" mb={10}>
+            {t.resumeHint}
+          </Text>
+          {/* Steps, not seconds: the thresholds are far apart (10 s ... 10 min). */}
+          <Slider
+            min={0}
+            max={resumeThresholds.length - 1}
+            step={1}
+            value={Math.max(0, resumeThresholds.indexOf(settings.resumeMinSeconds))}
+            onChange={(index) => settings.update({ resumeMinSeconds: resumeThresholds[index] })}
+            label={(index) => resumeLabel(resumeThresholds[index], t)}
+            marks={resumeThresholds.map((_, index) => ({ value: index }))}
+          />
+        </div>
         <div>
           <Group justify="space-between">
             <Text size="sm">{t.trackGap}</Text>
@@ -131,6 +158,14 @@ export function SettingsMenu() {
       </Menu.Dropdown>
     </Menu>
   );
+}
+
+function resumeLabel(seconds: number, t: Messages): string {
+  if (seconds === 0) {
+    return t.resumeOff;
+  }
+
+  return t.resumeFrom(seconds < 60 ? t.secondsShort(seconds) : t.minutesShort(seconds / 60));
 }
 
 function gapLabel(ms: number, t: Messages): string {

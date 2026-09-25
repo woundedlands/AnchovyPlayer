@@ -20,9 +20,12 @@ export const volumeStep = 0.05;
 
 export const maxVolume = 2;
 
+/** Tracks at least this long continue where they were stopped; 0 turns resuming off. */
+export const resumeThresholds = [0, 10, 30, 60, 300, 600];
+
 /**
- * Everything written to settings.json. Only user preferences belong here - never the last folder
- * or cursor position, which the app deliberately forgets.
+ * Everything written to settings.json: user preferences only. State the app keeps between runs
+ * (last folder, resume positions) lives in session.json (sessionStore.ts).
  */
 export interface Settings {
   playOnFocus: boolean;
@@ -37,6 +40,10 @@ export interface Settings {
   accentColor: string;
   /** "auto" follows the system language, falling back to English. */
   language: LanguageSetting;
+  /** Start in the folder (and on the file) where the last run ended. */
+  reopenLastFolder: boolean;
+  /** Tracks at least this long continue where they were stopped; 0 is off. One of `resumeThresholds`. */
+  resumeMinSeconds: number;
 }
 
 /**
@@ -56,6 +63,8 @@ const defaults: Settings = {
   closeToTray: true,
   accentColor: defaultAccent,
   language: "auto",
+  reopenLastFolder: true,
+  resumeMinSeconds: 30,
 };
 
 interface SettingsState extends Settings {
@@ -106,6 +115,8 @@ async function saveSettings(): Promise<void> {
     closeToTray: state.closeToTray,
     accentColor: state.accentColor,
     language: state.language,
+    reopenLastFolder: state.reopenLastFolder,
+    resumeMinSeconds: state.resumeMinSeconds,
   };
   try {
     await invoke("save_settings", { contents: JSON.stringify(file, null, 2) });
@@ -133,6 +144,8 @@ function parseSettings(raw: unknown): Settings {
         ? source.accentColor.toLowerCase()
         : defaults.accentColor,
     language: oneOf(source.language, languageSettings, defaults.language),
+    reopenLastFolder: typeof source.reopenLastFolder === "boolean" ? source.reopenLastFolder : defaults.reopenLastFolder,
+    resumeMinSeconds: oneOf(source.resumeMinSeconds, resumeThresholds, defaults.resumeMinSeconds),
   };
 }
 

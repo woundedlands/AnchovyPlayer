@@ -37,7 +37,7 @@ export const useBrowser = create<BrowserState>()((set, get) => ({
     try {
       const items =
         path === null
-          ? (await listRoots()).map((root) => ({ name: root, path: root, isDir: true }))
+          ? (await listRoots()).map((root) => ({ name: root, path: root, isDir: true, size: 0, modifiedMs: 0 }))
           : await listDir(path);
       // A slow listing must not overwrite the folder the user has already moved on to.
       if (request !== latestRequest) {
@@ -45,7 +45,7 @@ export const useBrowser = create<BrowserState>()((set, get) => ({
       }
       const next = toBrowserEntries(items);
       if (path !== null) {
-        next.unshift({ name: parentLabel, path: parentOf(path) ?? "", kind: "parent", label: parentLabel });
+        next.unshift({ name: parentLabel, path: parentOf(path) ?? "", kind: "parent", label: parentLabel, size: 0, modifiedMs: 0 });
       }
       const focused = focusPath === undefined ? -1 : next.findIndex((entry) => samePath(entry.path, focusPath));
       // Without a remembered item, start on the first real entry rather than on "..".

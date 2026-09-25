@@ -45,7 +45,7 @@ export const useSearch = create<SearchState>()((set, get) => {
         const name = item.relative.slice(item.relative.lastIndexOf("/") + 1);
         const kind = classify(name, item.isDir);
         if (kind !== null) {
-          entries.push({ name, path: item.path, kind, label: item.relative });
+          entries.push({ name, path: item.path, kind, label: item.relative, size: item.size, modifiedMs: item.modifiedMs });
         }
       }
       index = { root, builtAt: Date.now(), entries, partial: walked.length >= walkLimit };

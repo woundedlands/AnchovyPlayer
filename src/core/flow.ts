@@ -8,10 +8,12 @@ import { clampIndex, useBrowser, watchOpenFolder } from "../modules/browser/brow
 import { classify, type BrowserEntry } from "../modules/browser/entries";
 import { useSearch } from "../modules/browser/searchStore";
 import { selectedEntries, useSelection } from "../modules/browser/selectionStore";
-import { prefetch } from "../modules/player/api";
+import { prefetch, stop } from "../modules/player/api";
 import { connectPlayer, usePlayer } from "../modules/player/playerStore";
 import { nameOf, parentOf, pathKey, samePath } from "./paths";
 import { t } from "./i18n";
+import { connectResume } from "./resume";
+import { useSession } from "./sessionStore";
 import { useSettings } from "./settingsStore";
 import { searchInput, useUi } from "./uiStore";
 
@@ -249,6 +251,7 @@ function prefetchAroundFocus() {
 /** Starts everything that lives for the whole session. Returns the cleanup. */
 export function startApp(): () => void {
   const stopPlayer = connectPlayer();
+  const stopResume = connectResume();
 
   // The tray menu is native; its labels follow the UI language.
   const applyTrayLabels = () => void invoke("set_tray_labels", { show: t().trayShow, quit: t().trayQuit });
@@ -324,10 +327,20 @@ export function startApp(): () => void {
       return;
     }
     initialFolderOpened = true;
+    // A reloaded page starts with an empty player; a voice left in the engine would play on unseen.
+    await stop();
+    // Read before anything opens: opening a folder overwrites the remembered one.
+    const { lastFolder, lastFocus } = useSession.getState();
     const launched = await launchPath();
     if (launched) {
       await openPath(launched);
       return;
+    }
+    if (useSettings.getState().reopenLastFolder && lastFolder) {
+      const reopened = await useBrowser.getState().open(lastFolder, lastFocus ?? undefined);
+      if (reopened !== null) {
+        return;
+      }
     }
     const music = await audioDir().catch(() => null);
     const opened = music ? await useBrowser.getState().open(music) : null;
@@ -338,6 +351,7 @@ export function startApp(): () => void {
 
   return () => {
     stopPlayer();
+    stopResume();
     stopLanguage();
     stopTrack();
     stopBrowserPrefetch();

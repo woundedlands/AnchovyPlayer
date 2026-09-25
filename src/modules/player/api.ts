@@ -24,7 +24,11 @@ export interface Waveform {
   bins: number;
 }
 
-export const play = (path: string) => invoke<TrackInfo>("play", { path });
+/** `startSeconds` starts the track there directly (resume), with no jump from the start. */
+export const play = (path: string, startSeconds?: number) => invoke<TrackInfo>("play", { path, startSeconds });
+
+/** Anonymous content identity, shared with the waveform cache: keys resume positions. */
+export const fileFingerprint = (path: string) => invoke<string>("file_fingerprint", { path });
 
 export const pause = () => invoke<void>("pause");
 

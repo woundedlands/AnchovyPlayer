@@ -9,6 +9,9 @@ export interface BrowserEntry {
   kind: EntryKind;
   /** Shown instead of the name in search results: the path below the search root. */
   label: string;
+  /** Bytes and modification time; with the path they identify one version of the file. */
+  size: number;
+  modifiedMs: number;
 }
 
 // What the Rust decoder can play. Keep in sync with dev.md "Formats" and with the Explorer
@@ -54,12 +57,14 @@ export function compareEntries(a: BrowserEntry, b: BrowserEntry): number {
   return collator.compare(a.name, b.name);
 }
 
-export function toBrowserEntries(items: { name: string; path: string; isDir: boolean }[]): BrowserEntry[] {
+export function toBrowserEntries(
+  items: { name: string; path: string; isDir: boolean; size: number; modifiedMs: number }[],
+): BrowserEntry[] {
   const entries: BrowserEntry[] = [];
   for (const item of items) {
     const kind = classify(item.name, item.isDir);
     if (kind !== null) {
-      entries.push({ name: item.name, path: item.path, kind, label: item.name });
+      entries.push({ name: item.name, path: item.path, kind, label: item.name, size: item.size, modifiedMs: item.modifiedMs });
     }
   }
 
