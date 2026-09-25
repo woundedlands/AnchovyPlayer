@@ -7,7 +7,7 @@ import { PathBar } from "../modules/browser/PathBar";
 import { useSearch } from "../modules/browser/searchStore";
 import { PlayerBar, volumeWheelStep } from "../modules/player/PlayerBar";
 import { usePlayer } from "../modules/player/playerStore";
-import { activate, focusByUser, openPath, playFromRow, startApp, useVisibleList } from "./flow";
+import { activate, focusByUser, openPath, playFromRow, startApp, togglePlayback, useVisibleList } from "./flow";
 import { handleKey } from "./keyboard";
 import { SettingsMenu } from "./SettingsMenu";
 import { useSettings } from "./settingsStore";
@@ -110,7 +110,7 @@ export function App() {
         />
       </main>
 
-      <PlayerBar active={zone === "player"} onActivate={() => setZone("player")} />
+      <PlayerBar active={zone === "player"} onActivate={() => setZone("player")} onTogglePlay={togglePlayback} />
     </div>
   );
 }

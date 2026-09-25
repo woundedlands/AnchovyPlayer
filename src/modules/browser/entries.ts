@@ -11,7 +11,8 @@ export interface BrowserEntry {
   label: string;
 }
 
-// What the Rust decoder can play. Keep in sync with dev.md "Formats".
+// What the Rust decoder can play. Keep in sync with dev.md "Formats" and with the Explorer
+// registration in src-tauri/windows/installer-hooks.nsh.
 const playableExtensions = new Set([
   "wav", "wave", "aif", "aiff", "aifc", "caf",
   "mp3", "mp2", "mp1",

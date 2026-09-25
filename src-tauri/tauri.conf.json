@@ -37,8 +37,8 @@
       "icons/icon.ico"
     ],
     "windows": {
-      "webviewInstallMode": {
-        "type": "offlineInstaller"
+      "nsis": {
+        "installerHooks": "windows/installer-hooks.nsh"
       }
     },
     "resources": {

@@ -16,7 +16,7 @@ The UX bar: large, calm, modern UI; every interaction answers instantly; nothing
 - **Two focus zones, file list and player**, each with its own arrow keys. Clicking a zone or Tab switches. The active zone shows an accent edge.
   - List: Up/Down/PageUp/PageDown/Home/End move focus, Left/Backspace go to the parent folder, Right/Enter enter a folder or play a file.
   - Player: Left/Right seek 5 s (Shift: 1 s), Up/Down previous/next track (the list focus follows), Enter toggles pause. Volume is the wheel.
-  - Anywhere: Space toggles pause (plays the focused file if nothing is loaded), Ctrl+R cycles repeat, Ctrl+F searches, letters jump to name and switch to the list zone.
+  - Anywhere: Space toggles pause. With nothing loaded yet, Space, Enter in the player zone and the play button start the focused file, or the first audio file when a folder is focused - opening a folder never starts playback by itself, Ctrl+R cycles repeat, Ctrl+F searches, letters jump to name and switch to the list zone.
 - **Jump to name** (like every OS file browser): typed characters accumulate into a prefix for ~1 s after the last key and focus the next item starting with it. Repeating one letter cycles through items starting with that letter. Nothing is filtered or hidden.
 - **Search** is a separate, explicit mode (Ctrl+F or the search field): a fuzzy filter over the current folder and, recursively, its subfolders, shown as paths below the folder. Esc or Left closes it.
 - **Instant playback**, including files a few milliseconds long. A new sound cuts the previous one with a 3 ms fade-out; the new one has no fade-in, because the first samples of an SFX are its attack.
@@ -24,7 +24,7 @@ The UX bar: large, calm, modern UI; every interaction answers instantly; nothing
 - **Volume** 0-200% on the mouse wheel over the player (Ctrl+wheel anywhere), 5% per notch. Above 100% the output is clamped, not wrapped.
 - **Waveform** of the current file, in the spirit of Unity's audio clip preview: min/max peaks per channel (one lane for mono), click or drag to seek, played part in the accent colour. Times use the unit that fits the track: ms below 1 s, tenths below 10 s, m:ss above.
 - **Drag and drop out**: drag a file from the list into a DAW, engine, explorer or messenger.
-- **Shell integration**: "Open with Anchovy Player" on audio files and on folders. A path argument works already (a second launch forwards it to the running window); the installer registration is not done yet. Opening a file shows its folder with the file focused and playing.
+- **Explorer integration** (like VS Code's "Open with Code"): "Open with Anchovy Player" in the context menu of audio files whatever their default app is, of folders and of a folder's empty space; the app is also listed under "Open with" for audio types without taking over the default. Optional in the installer (checkbox on the welcome page, on by default; passive/silent installs keep it on); the uninstaller removes it. Opening a file shows its folder with the file focused and plays it **once, ignoring repeat** - a file suddenly looping or a whole folder starting is alarming; repeat applies again as soon as the user starts anything. Opening a folder plays nothing; a second launch forwards its path to the running window. On Windows 11 the entry sits under "Show more options", like VS Code's.
 - **Formats**: wav, mp3, ogg (vorbis, opus), m4a (aac, alac), flac, aiff. Recognised-but-unsupported audio (wma, ape...) is listed and marked; other files are not shown.
 - **Played files are dimmed** in the list while the folder stays open (live reloads keep the marks); opening another folder clears them.
 - The app does not remember the last folder or cursor positions between runs; it starts in the Music folder. Preferences (play on focus, repeat, shuffle, volume, pause between tracks, theme) are remembered in settings.json.
@@ -54,10 +54,11 @@ These are what makes "instant" true; any change that breaks one of them breaks t
 
 The user installs one NSIS `.exe` and nothing else - no redistributables, no runtime downloads.
 
-- The MSVC runtime is linked statically (`src-tauri/.cargo/config.toml`, `+crt-static`). Without it the exe imports `VCRUNTIME140.dll` and fails to start on a clean Windows. Check with `dumpbin /dependents` after touching build flags: only system DLLs are allowed.
+- The MSVC runtime is linked statically (`src-tauri/.cargo/config.toml`, `+crt-static`). Without it the exe imports `VCRUNTIME140.dll` and fails to start on a clean Windows. Check with `dumpbin /dependents` after touching build flags: only system DLLs are allowed. `api-ms-win-crt-*` imports are fine - that is the Universal CRT, part of Windows 10 and later; `VCRUNTIME140.dll` or `MSVCP140.dll` are not.
 - libopus is a static `opus.lib`; there is no `opus.dll` to ship.
-- WebView2 is bundled as the offline installer, so the setup works without internet on a machine that lacks it.
-- Prefer bundling over asking the user or developer to install things. Repo size is cheaper than setup steps.
+- WebView2 is not bundled: nearly every Windows 10/11 machine has it, and Tauri's default bootstrapper downloads it during setup on the rare one that does not. Bundling the offline installer made the setup ~210 MB for a ~7 MB app.
+- Prefer bundling over asking the user or developer to install things that a normal machine may lack. Repo size is cheaper than setup steps.
+- **Explorer registration lives in `src-tauri/windows/installer-hooks.nsh`**, written to `SHCTX` so it follows the install mode. Its extension list must match `playableExtensions` in `src/modules/browser/entries.ts` (minus video containers). Tauri includes the hooks file before any page is declared, which is why a `MUI_PAGE_CUSTOMFUNCTION_SHOW`/`LEAVE` defined there attaches to the welcome page - and why `MUI_BGCOLOR` is not defined yet at that point.
 
 ## Build environment
 

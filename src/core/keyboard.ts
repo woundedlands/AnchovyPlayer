@@ -1,7 +1,7 @@
 import { jumpToName, useBrowser } from "../modules/browser/browserStore";
 import { useSearch } from "../modules/browser/searchStore";
 import { usePlayer } from "../modules/player/playerStore";
-import { activate, focusByUser, leaveSearch, playEntry, visibleList } from "./flow";
+import { activate, focusByUser, leaveSearch, togglePlayback, visibleList } from "./flow";
 import { searchInput, useUi } from "./uiStore";
 
 const pageSize = 10;
@@ -49,13 +49,7 @@ function handleGlobalKey(event: KeyboardEvent, inSearch: boolean): boolean {
     return true;
   }
   if (event.key === " ") {
-    const { entries, focusIndex } = visibleList();
-    const focused = entries[focusIndex];
-    if (!player.track && focused?.kind === "audio") {
-      playEntry(focused, entries);
-    } else {
-      player.togglePause();
-    }
+    togglePlayback();
     return true;
   }
   if (zone === "player" && handlePlayerKey(event)) {
@@ -133,7 +127,7 @@ function handlePlayerKey(event: KeyboardEvent): boolean {
       player.next();
       return true;
     case "Enter":
-      player.togglePause();
+      togglePlayback();
       return true;
   }
 

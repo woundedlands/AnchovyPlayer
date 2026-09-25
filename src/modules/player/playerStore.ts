@@ -22,8 +22,12 @@ interface PlayerState {
   track: CurrentTrack | null;
   error: string | null;
   advance: Advance | null;
-  /** Plays `path`; `playlist` becomes the list for next/previous, repeat-folder and shuffle. */
-  playFile: (path: string, playlist?: string[]) => Promise<void>;
+  /**
+   * Plays `path`; `playlist` becomes the list for next/previous, repeat-folder and shuffle.
+   * `oneShot` plays it once whatever the repeat mode - for files opened from Explorer, where a
+   * sound suddenly looping or the whole folder starting would be alarming.
+   */
+  playFile: (path: string, playlist?: string[], options?: { oneShot?: boolean }) => Promise<void>;
   togglePause: () => void;
   seekTo: (seconds: number) => void;
   seekBy: (delta: number) => void;
@@ -41,6 +45,15 @@ const shufflePlayed = new Set<string>();
 let handledEnd = 0;
 let gapTimer: ReturnType<typeof setTimeout> | undefined;
 let advanceSequence = 0;
+/** The current track was opened from Explorer: no repeat until the user starts playback themselves. */
+let oneShot = false;
+
+/** Gapless repeat-current is looped by the engine; everything else is scheduled here. */
+function engineLooping(): boolean {
+  const { repeat, trackGapMs } = useSettings.getState();
+
+  return !oneShot && repeat === "current" && trackGapMs === 0;
+}
 
 export const usePlayer = create<PlayerState>()((set, get) => {
   const advanceTo = (path: string | null) => {
@@ -57,13 +70,16 @@ export const usePlayer = create<PlayerState>()((set, get) => {
     error: null,
     advance: null,
 
-    playFile: async (path, list) => {
+    playFile: async (path, list, options) => {
       clearTimeout(gapTimer);
+      oneShot = options?.oneShot ?? false;
       if (list) {
         playlist = list;
       }
       shufflePlayed.add(path);
       try {
+        // Awaited first: a 40 ms clip would otherwise loop once before a late "no looping" arrives.
+        await api.setLooping(engineLooping());
         const info = await api.play(path);
         set({ track: { path, voiceId: info.voiceId }, error: null });
         // A 40 ms clip can finish before play() returns; its end event then arrived while the store
@@ -131,10 +147,8 @@ export const usePlayer = create<PlayerState>()((set, get) => {
  */
 export function connectPlayer(): () => void {
   const applyEngineSettings = () => {
-    const { volume, repeat, trackGapMs } = useSettings.getState();
-    void api.setVolume(volume);
-    // Only a gapless repeat is left to the engine; with a gap the replay is scheduled here.
-    void api.setLooping(repeat === "current" && trackGapMs === 0);
+    void api.setVolume(useSettings.getState().volume);
+    void api.setLooping(engineLooping());
   };
   applyEngineSettings();
   const stopSettings = useSettings.subscribe(applyEngineSettings);
@@ -160,7 +174,7 @@ function handleTrackEnd(status: api.PlaybackStatus) {
   }
   handledEnd = status.endedVoiceId;
   const { repeat, trackGapMs } = useSettings.getState();
-  if (repeat === "off" || (repeat === "current" && trackGapMs === 0)) {
+  if (oneShot || repeat === "off" || engineLooping()) {
     return;
   }
   clearTimeout(gapTimer);

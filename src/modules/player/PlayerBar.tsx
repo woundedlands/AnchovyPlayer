@@ -30,9 +30,11 @@ const repeatLabels: Record<RepeatMode, string> = {
 interface PlayerBarProps {
   active: boolean;
   onActivate: () => void;
+  /** Play/pause; with nothing loaded it starts what the list has focused (decided by the app). */
+  onTogglePlay: () => void;
 }
 
-export function PlayerBar({ active, onActivate }: PlayerBarProps) {
+export function PlayerBar({ active, onActivate, onTogglePlay }: PlayerBarProps) {
   const player = usePlayer();
   const settings = useSettings();
   const { status, track, error } = player;
@@ -91,7 +93,7 @@ export function PlayerBar({ active, onActivate }: PlayerBarProps) {
           <ActionIcon variant="subtle" size="xl" radius="xl" color="gray" onClick={player.previous}>
             <IconPlayerSkipBackFilled size={22} />
           </ActionIcon>
-          <ActionIcon size={56} radius="xl" className={classes.play} onClick={player.togglePause}>
+          <ActionIcon size={56} radius="xl" className={classes.play} onClick={onTogglePlay}>
             {playing ? <IconPlayerPauseFilled size={26} /> : <IconPlayerPlayFilled size={26} />}
           </ActionIcon>
           <ActionIcon variant="subtle" size="xl" radius="xl" color="gray" onClick={player.next}>

@@ -57,8 +57,11 @@ export function playEntry(entry: BrowserEntry, from: BrowserEntry[]) {
   if (entry.kind !== "audio") {
     return;
   }
-  const playlist = from.filter((item) => item.kind === "audio").map((item) => item.path);
-  void usePlayer.getState().playFile(entry.path, playlist);
+  void usePlayer.getState().playFile(entry.path, audioPaths(from));
+}
+
+function audioPaths(entries: BrowserEntry[]): string[] {
+  return entries.filter((item) => item.kind === "audio").map((item) => item.path);
 }
 
 /** Focus moved by the user (click or arrows): this is what "play on focus" reacts to. */
@@ -104,6 +107,25 @@ export function playFromRow(index: number) {
   activate(index);
 }
 
+/**
+ * Play/pause for the transport button, Space and Enter. With nothing loaded yet it starts the
+ * focused file - or the first audio file when a folder is focused - instead of doing nothing.
+ */
+export function togglePlayback() {
+  const player = usePlayer.getState();
+  if (player.track) {
+    player.togglePause();
+    return;
+  }
+  const { entries, focusIndex } = visibleList();
+  const focused = entries[focusIndex];
+  const entry = focused?.kind === "audio" ? focused : entries.find((item) => item.kind === "audio");
+  if (entry) {
+    setVisibleFocus(entries.indexOf(entry));
+    playEntry(entry, entries);
+  }
+}
+
 export function leaveSearch() {
   useSearch.getState().close();
   searchInput.current?.blur();
@@ -118,7 +140,8 @@ export async function openPath(path: string, focusPath?: string) {
     const entries = await open(parentOf(path), path);
     const entry = entries?.find((item) => samePath(item.path, path));
     if (entry && entries) {
-      playEntry(entry, entries);
+      // Opened from Explorer: play it once. Repeat applies again as soon as the user plays anything.
+      void usePlayer.getState().playFile(entry.path, audioPaths(entries), { oneShot: true });
     }
     return;
   }
@@ -143,7 +166,11 @@ function prefetchAroundFocus() {
 export function startApp(): () => void {
   const stopPlayer = connectPlayer();
   const stopWatching = watchOpenFolder();
-  const stopOpenPath = onOpenPath((path) => void openPath(path));
+  const stopOpenPath = onOpenPath((path) => {
+    // The native window is brought forward by Rust; the page needs focus too, or arrows do nothing.
+    window.focus();
+    void openPath(path);
+  });
 
   const stopTrack = usePlayer.subscribe((state, previous) => {
     if (state.track && state.track.path !== previous.track?.path) {
