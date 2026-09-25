@@ -1,0 +1,71 @@
+.row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 100%;
+  padding: 0 12px 0 16px;
+  border-radius: var(--mantine-radius-md);
+  font-size: 15px;
+  cursor: default;
+  transition: background-color 80ms ease;
+}
+
+.row:hover {
+  background: var(--app-raised);
+}
+
+.row[data-focused] {
+  background: var(--app-focus);
+}
+
+.row[data-focused][data-zone-active] {
+  background: var(--app-focus-strong);
+  box-shadow: inset 3px 0 0 var(--app-accent);
+}
+
+.icon {
+  display: flex;
+  flex: none;
+  color: var(--app-text-dim);
+}
+
+.row[data-kind="dir"] .icon {
+  color: var(--app-accent-soft);
+}
+
+.row[data-current] .icon,
+.row[data-current] .name {
+  color: var(--app-accent);
+}
+
+.row[data-kind="unsupported"] {
+  opacity: 0.5;
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.extension {
+  flex: none;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--app-text-dim);
+}
+
+.play {
+  flex: none;
+  opacity: 0;
+  transition: opacity 80ms ease;
+}
+
+.row:hover .play,
+.row[data-focused] .play,
+.row[data-current] .play {
+  opacity: 1;
+}

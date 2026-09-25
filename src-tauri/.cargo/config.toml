@@ -1,0 +1,10 @@
+# Static MSVC runtime: the installed app must run on a clean Windows without the VC++ Redistributable.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+# libopus is built from source with CMake + Ninja downloaded by `npm install` (scripts/setup-tools.mjs).
+# Ninja instead of a Visual Studio generator: VS generators break on incomplete or mismatched VS installs.
+[env]
+CMAKE = { value = "../tools/cmake/bin/cmake.exe", relative = true }
+CMAKE_GENERATOR = "Ninja"
+CMAKE_TOOLCHAIN_FILE = { value = ".cargo/toolchain.cmake", relative = true }

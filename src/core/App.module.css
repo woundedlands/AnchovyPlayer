@@ -1,0 +1,43 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--app-bg);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  background: var(--app-surface);
+  border-bottom: 1px solid var(--app-border);
+}
+
+.search {
+  width: 280px;
+  flex: none;
+}
+
+.search input {
+  height: 40px;
+  background: var(--app-raised);
+  border-color: transparent;
+}
+
+.search input:focus {
+  border-color: var(--app-accent);
+}
+
+.browser {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.searchInfo {
+  padding: 10px 28px 0;
+  font-size: 13px;
+  color: var(--app-text-dim);
+}

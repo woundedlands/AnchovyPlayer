@@ -1,0 +1,75 @@
+.root {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.crumbs {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  padding: 0 8px;
+  border-radius: var(--mantine-radius-md);
+  background: var(--app-raised);
+  overflow: hidden;
+  cursor: text;
+}
+
+.segment {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.chevron {
+  flex: none;
+  color: var(--app-text-dim);
+  margin: 0 2px;
+}
+
+.crumb {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: var(--mantine-radius-sm);
+  font-size: 14px;
+  color: var(--app-text-dim);
+  white-space: nowrap;
+}
+
+.crumb:hover {
+  background: var(--app-focus);
+  color: var(--app-text);
+}
+
+.crumb[data-last] {
+  color: var(--app-text);
+  font-weight: 600;
+}
+
+.input {
+  flex: 1;
+}
+
+.input input {
+  height: 40px;
+  background: var(--app-raised);
+  border-color: var(--app-accent);
+  font-size: 14px;
+}
+
+/* Segments keep their full width; overflow is resolved by collapsing leading ones into "…". */
+.segment {
+  flex-shrink: 0;
+}
+
+/* A single absurdly long folder name is cut instead of pushing everything else out. */
+.crumb {
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
