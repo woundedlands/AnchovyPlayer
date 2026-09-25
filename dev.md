@@ -17,6 +17,7 @@ The UX bar: large, calm, modern UI; every interaction answers instantly; nothing
 - **Selection is separate from focus** and forms the *group*. Plain click: focus, selection cleared. Ctrl+click toggles, Shift+click / Shift+arrows select a range from the anchor, Ctrl+A all, Ctrl+Space toggles the focused row, Esc clears. Modifier clicks never play (picking a group must not fire every file). Plain arrow moves keep the selection. A press on an already selected row replaces the selection only on release, so the press can start dragging the whole group (Explorer does the same). The selection belongs to one list: another folder or search clears it, a live reload keeps it (keyed by path).
 - **Played files are dimmed** for the whole session, across folders; memory only, never saved.
 - **Jump to name**: typed characters accumulate into a prefix for ~1 s and focus the next item starting with it; repeating one letter cycles. Nothing is filtered.
+- **Back / forward** like Explorer: buttons left of "up", Alt+Left/Right, the mouse's side buttons. Each step returns to the folder with the item that was under the cursor. Only moving to another folder is recorded - live reloads and the first listing at start are not.
 - **Search** is a separate, explicit mode (Ctrl+F or the search field): a fuzzy filter over the current folder and, recursively, its subfolders, shown as paths below the folder. Esc or Left closes it.
 - **List info** (selection count, search results) floats as a pill over the list. It must never take layout space: rows jumping under the cursor the moment a selection appears made clicks land on the wrong row.
 
@@ -40,6 +41,7 @@ The UX bar: large, calm, modern UI; every interaction answers instantly; nothing
   - List: Up/Down/PageUp/PageDown/Home/End move focus (Shift extends the selection), Left/Backspace parent folder, Right/Enter enter a folder or play a file.
   - Player: Left/Right seek 5 s (Shift: 1 s), Up/Down previous/next track (list focus follows), Enter play/pause.
   - Anywhere: Space play/pause, Ctrl+R repeat, Ctrl+F search, Ctrl+Up/Down volume, letters jump to name.
+- **Until something plays, the player bar shows the cued file** - the one Play would start - with its name, folder and waveform; a click on that waveform starts it there. The folder under the track name is a link: it shows the track in its folder in the list, focused, without playing.
 - With nothing loaded, Space, Enter in the player and the play button start the focused file, or the first audio file when a folder is focused. Opening a folder never starts playback by itself.
 
 ### Shell and app life

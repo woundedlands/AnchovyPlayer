@@ -8,8 +8,19 @@ import { useSearch } from "../modules/browser/searchStore";
 import { PlayerBar } from "../modules/player/PlayerBar";
 import { usePlayer } from "../modules/player/playerStore";
 import { useSelection } from "../modules/browser/selectionStore";
-import { activate, dragPaths, openPath, playFromRow, pressEntry, startApp, togglePlayback, useVisibleList } from "./flow";
-import { handleKey } from "./keyboard";
+import {
+  activate,
+  dragPaths,
+  openPath,
+  playCuedAt,
+  playFromRow,
+  pressEntry,
+  showInList,
+  startApp,
+  togglePlayback,
+  useVisibleList,
+} from "./flow";
+import { handleKey, handleMouseButton } from "./keyboard";
 import { EntryMenu } from "./EntryMenu";
 import { useT } from "./i18n";
 import { commitRename, openContextMenu } from "./fileActions";
@@ -22,6 +33,8 @@ export function App() {
   const zone = useUi((state) => state.zone);
   const setZone = useUi((state) => state.setZone);
   const dir = useBrowser((state) => state.dir);
+  const canBack = useBrowser((state) => state.back.length > 0);
+  const canForward = useBrowser((state) => state.forward.length > 0);
   const error = useBrowser((state) => state.error);
   const played = useBrowser((state) => state.played);
   const selected = useSelection((state) => state.selected);
@@ -38,8 +51,14 @@ export function App() {
 
   useEffect(() => {
     window.addEventListener("keydown", handleKey);
+    window.addEventListener("mousedown", handleMouseButton);
+    window.addEventListener("mouseup", handleMouseButton);
 
-    return () => window.removeEventListener("keydown", handleKey);
+    return () => {
+      window.removeEventListener("keydown", handleKey);
+      window.removeEventListener("mousedown", handleMouseButton);
+      window.removeEventListener("mouseup", handleMouseButton);
+    };
   }, []);
 
   const emptyText = (() => {
@@ -70,6 +89,10 @@ export function App() {
             path === null ? void useBrowser.getState().open(null, focusPath) : void openPath(path, focusPath)
           }
           onUp={() => useBrowser.getState().goUp()}
+          onBack={() => useBrowser.getState().goBack()}
+          onForward={() => useBrowser.getState().goForward()}
+          canBack={canBack}
+          canForward={canForward}
           onDone={() => setZone("browser")}
         />
         <TextInput
@@ -137,7 +160,10 @@ export function App() {
       )}
       <EntryMenu />
 
-      <PlayerBar active={zone === "player"} onActivate={() => setZone("player")} onTogglePlay={togglePlayback} />
+      <PlayerBar active={zone === "player"} onActivate={() => setZone("player")} onTogglePlay={togglePlayback}
+        onShowInList={showInList}
+        onPlayCuedAt={playCuedAt}
+      />
     </div>
   );
 }

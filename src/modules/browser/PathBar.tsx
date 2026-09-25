@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { ActionIcon, TextInput, Tooltip, UnstyledButton } from "@mantine/core";
-import { IconArrowUp, IconChevronRight, IconDeviceDesktop } from "@tabler/icons-react";
+import { IconArrowLeft, IconArrowRight, IconArrowUp, IconChevronRight, IconDeviceDesktop } from "@tabler/icons-react";
 import { useElementSize, useMergedRef } from "@mantine/hooks";
 import { joinSegments, nameOf, parentOf, separatorOf, splitPath } from "../../core/paths";
 import { useT } from "../../core/i18n";
@@ -12,6 +12,10 @@ interface PathBarProps {
   /** `focusPath` is the folder we came out of, focused in the list like every file manager does. */
   onNavigate: (path: string | null, focusPath?: string) => void;
   onUp: () => void;
+  onBack: () => void;
+  onForward: () => void;
+  canBack: boolean;
+  canForward: boolean;
   /** Called when editing ends, so keyboard control returns to the list. */
   onDone: () => void;
 }
@@ -20,7 +24,7 @@ interface PathBarProps {
  * Breadcrumbs like Windows Explorer: click a segment to go there, click the empty space to type a raw path.
  * Leading segments that do not fit collapse into "…", so the current folder always stays readable.
  */
-export function PathBar({ dir, onNavigate, onUp, onDone }: PathBarProps) {
+export function PathBar({ dir, onNavigate, onUp, onBack, onForward, canBack, canForward, onDone }: PathBarProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [hiddenCount, setHiddenCount] = useState(0);
@@ -68,6 +72,16 @@ export function PathBar({ dir, onNavigate, onUp, onDone }: PathBarProps) {
 
   return (
     <div className={classes.root}>
+      <Tooltip label={t.back}>
+        <ActionIcon variant="subtle" color="gray" size="lg" radius="md" onClick={onBack} disabled={!canBack}>
+          <IconArrowLeft size={20} />
+        </ActionIcon>
+      </Tooltip>
+      <Tooltip label={t.forward}>
+        <ActionIcon variant="subtle" color="gray" size="lg" radius="md" onClick={onForward} disabled={!canForward}>
+          <IconArrowRight size={20} />
+        </ActionIcon>
+      </Tooltip>
       <Tooltip label={t.parentFolder}>
         <ActionIcon variant="subtle" color="gray" size="lg" radius="md" onClick={onUp} disabled={dir === null}>
           <IconArrowUp size={20} />

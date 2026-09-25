@@ -24,6 +24,12 @@ interface PlayerState {
    * waveform then moves the playhead at display rate however slow the actual seeks are.
    */
   seekTarget: number | null;
+  /**
+   * With nothing played yet: the file Play would start, shown in the player bar (name, path,
+   * waveform) so the bar is not empty. Set by the app from the list's focus.
+   */
+  cued: string | null;
+  setCued: (path: string | null) => void;
   track: CurrentTrack | null;
   error: string | null;
   advance: Advance | null;
@@ -32,7 +38,7 @@ interface PlayerState {
    * `oneShot` plays it once whatever the repeat mode - for files opened from Explorer, where a
    * sound suddenly looping or the whole folder starting would be alarming.
    */
-  playFile: (path: string, playlist?: string[], options?: { oneShot?: boolean }) => Promise<void>;
+  playFile: (path: string, playlist?: string[], options?: { oneShot?: boolean; startAt?: number }) => Promise<void>;
   /** Replaces the playlist without touching playback, e.g. when the selection changes mid-track. */
   setPlaylist: (paths: string[]) => void;
   togglePause: () => void;
@@ -91,6 +97,13 @@ export const usePlayer = create<PlayerState>()((set, get) => {
     error: null,
     advance: null,
     seekTarget: null,
+    cued: null,
+
+    setCued: (cued) => {
+      if (get().cued !== cued) {
+        set({ cued });
+      }
+    },
 
     playFile: async (path, list, options) => {
       clearTimeout(gapTimer);
@@ -104,7 +117,7 @@ export const usePlayer = create<PlayerState>()((set, get) => {
       try {
         // Awaited first: a 40 ms clip would otherwise loop once before a late "no looping" arrives.
         await api.setLooping(engineLooping());
-        const startAt = startResolver ? await startResolver(path).catch(() => null) : null;
+        const startAt = options?.startAt ?? (startResolver ? await startResolver(path).catch(() => null) : null);
         const info = await api.play(path, startAt ?? undefined);
         set({ track: { path, voiceId: info.voiceId }, error: null });
         // A 40 ms clip can finish before play() returns; its end event then arrived while the store

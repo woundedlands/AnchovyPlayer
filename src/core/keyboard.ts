@@ -36,6 +36,15 @@ function handleGlobalKey(event: KeyboardEvent, inSearch: boolean): boolean {
   const { zone, setZone } = useUi.getState();
   const player = usePlayer.getState();
 
+  // Explorer's history keys; Alt+arrows are taken before the zones see the arrows.
+  if ((event.altKey && event.key === "ArrowLeft") || event.key === "BrowserBack") {
+    useBrowser.getState().goBack();
+    return true;
+  }
+  if ((event.altKey && event.key === "ArrowRight") || event.key === "BrowserForward") {
+    useBrowser.getState().goForward();
+    return true;
+  }
   if (ctrl && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
     player.stepVolume(event.key === "ArrowUp" ? 1 : -1);
     return true;
@@ -131,6 +140,24 @@ function handleBrowserKey(event: KeyboardEvent): boolean {
   }
 
   return false;
+}
+
+/** The mouse's side buttons (3 back, 4 forward) walk the folder history, as in Explorer. */
+export function handleMouseButton(event: MouseEvent) {
+  // The WebView's own default for these buttons is page history, which would reload the app.
+  if (event.button === 3 || event.button === 4) {
+    event.preventDefault();
+  }
+  if (event.type !== "mouseup") {
+    return;
+  }
+  if (event.button === 3) {
+    event.preventDefault();
+    useBrowser.getState().goBack();
+  } else if (event.button === 4) {
+    event.preventDefault();
+    useBrowser.getState().goForward();
+  }
 }
 
 /** Explorer's file shortcuts, acting on the selection or the focused row. */

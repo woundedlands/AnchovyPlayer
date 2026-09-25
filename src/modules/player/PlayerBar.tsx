@@ -1,4 +1,4 @@
-import { ActionIcon, Slider, Text, Tooltip } from "@mantine/core";
+import { ActionIcon, Slider, Text, Tooltip, UnstyledButton } from "@mantine/core";
 import {
   IconArrowsShuffle,
   IconPlayerPauseFilled,
@@ -24,9 +24,13 @@ interface PlayerBarProps {
   onActivate: () => void;
   /** Play/pause; with nothing loaded it starts what the list has focused (decided by the app). */
   onTogglePlay: () => void;
+  /** Opens the folder of `path` in the list with the file focused. */
+  onShowInList: (path: string) => void;
+  /** A click on the waveform of the cued file: play it from there. */
+  onPlayCuedAt: (seconds: number) => void;
 }
 
-export function PlayerBar({ active, onActivate, onTogglePlay }: PlayerBarProps) {
+export function PlayerBar({ active, onActivate, onTogglePlay, onShowInList, onPlayCuedAt }: PlayerBarProps) {
   const player = usePlayer();
   const settings = useSettings();
   const t = useT();
@@ -38,6 +42,9 @@ export function PlayerBar({ active, onActivate, onTogglePlay }: PlayerBarProps) 
   const enginePosition = onCurrentVoice ? (ended ? status.duration : status.position) : 0;
   const position = player.seekTarget ?? enginePosition;
   const duration = onCurrentVoice ? status.duration : 0;
+  // Before anything plays the bar shows what Play would start.
+  const shownPath = track?.path ?? player.cued;
+  const folder = shownPath ? parentOf(shownPath) : null;
 
   return (
     <footer
@@ -56,7 +63,12 @@ export function PlayerBar({ active, onActivate, onTogglePlay }: PlayerBarProps) 
       }}
     >
       <div className={classes.wave}>
-        <Waveform path={track?.path ?? null} position={position} duration={duration} onSeek={player.seekTo} />
+        <Waveform
+          path={shownPath}
+          position={position}
+          duration={duration}
+          onSeek={track ? player.seekTo : onPlayCuedAt}
+        />
       </div>
 
       <div className={classes.controls}>
@@ -68,11 +80,20 @@ export function PlayerBar({ active, onActivate, onTogglePlay }: PlayerBarProps) 
           ) : (
             <>
               <Text className={classes.title} truncate="end">
-                {track ? nameOf(track.path) : t.nothingPlaying}
+                {shownPath ? nameOf(shownPath) : t.nothingPlaying}
               </Text>
-              <Text className={classes.meta} truncate="end">
-                {track ? `${formatTime(position, duration)} / ${formatTime(duration, duration)} · ${parentOf(track.path) ?? ""}` : t.spaceHint}
-              </Text>
+              <div className={classes.meta}>
+                {track && <span className={classes.time}>{`${formatTime(position, duration)} / ${formatTime(duration, duration)}`}</span>}
+                {shownPath && folder ? (
+                  <Tooltip label={t.openTrackFolder} openDelay={400}>
+                    <UnstyledButton className={classes.folder} onClick={() => onShowInList(shownPath)}>
+                      {folder}
+                    </UnstyledButton>
+                  </Tooltip>
+                ) : (
+                  !track && <span>{t.spaceHint}</span>
+                )}
+              </div>
             </>
           )}
         </div>

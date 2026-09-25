@@ -196,13 +196,37 @@ export function togglePlayback() {
     player.togglePause();
     return;
   }
-  const { entries, focusIndex } = visibleList();
-  const focused = entries[focusIndex];
-  const entry = focused?.kind === "audio" ? focused : entries.find((item) => item.kind === "audio");
+  const { entries } = visibleList();
+  const entry = cueTarget();
   if (entry) {
     setVisibleFocus(entries.indexOf(entry));
     playEntry(entry, entries);
   }
+}
+
+/** What Play starts when nothing is loaded: the focused audio file, else the first one in the list. */
+function cueTarget(): BrowserEntry | undefined {
+  const { entries, focusIndex } = visibleList();
+  const focused = entries[focusIndex];
+
+  return focused?.kind === "audio" ? focused : entries.find((item) => item.kind === "audio");
+}
+
+/** A click on the cued file's waveform: start it at that point. */
+export function playCuedAt(seconds: number) {
+  const { entries } = visibleList();
+  const entry = cueTarget();
+  if (entry) {
+    setVisibleFocus(entries.indexOf(entry));
+    void usePlayer.getState().playFile(entry.path, groupPlaylist(entries, entry), { startAt: seconds });
+  }
+}
+
+/** The player bar's folder link: show the track in its folder, without playing anything. */
+export function showInList(path: string) {
+  useSearch.getState().close();
+  void useBrowser.getState().open(parentOf(path), path);
+  useUi.getState().setZone("browser");
 }
 
 export function leaveSearch() {
@@ -308,6 +332,14 @@ export function startApp(): () => void {
     }
   });
 
+  // Until something plays, the player bar previews what Play would start.
+  const updateCue = () => {
+    const player = usePlayer.getState();
+    player.setCued(player.track ? null : (cueTarget()?.path ?? null));
+  };
+  const stopBrowserCue = useBrowser.subscribe(updateCue);
+  const stopSearchCue = useSearch.subscribe(updateCue);
+
   const stopBrowserPrefetch = useBrowser.subscribe((state, previous) => {
     if (state.entries !== previous.entries || state.focusIndex !== previous.focusIndex) {
       prefetchAroundFocus();
@@ -357,6 +389,8 @@ export function startApp(): () => void {
     stopBrowserPrefetch();
     stopSearchPrefetch();
     stopBrowserIdentity();
+    stopBrowserCue();
+    stopSearchCue();
     stopSearchIdentity();
     stopSelection();
     void stopWatching.then((stop) => stop());

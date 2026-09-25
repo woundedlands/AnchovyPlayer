@@ -15,15 +15,35 @@ interface BrowserState {
   error: string | null;
   /** `pathKey`s of files played this session; shown dimmed. Kept in memory only, never saved. */
   played: ReadonlySet<string>;
-  /** Resolves to the new listing, or null if it failed or a newer navigation superseded it. */
-  open: (path: string | null, focusPath?: string) => Promise<BrowserEntry[] | null>;
+  /** Explorer-style history: folders left behind, and those left by going back. */
+  back: HistoryPlace[];
+  forward: HistoryPlace[];
+  /**
+   * Resolves to the new listing, or null if it failed or a newer navigation superseded it.
+   * Moving to another folder records the one left in the back history; `fromHistory` is for
+   * back/forward themselves.
+   */
+  open: (path: string | null, focusPath?: string, fromHistory?: boolean) => Promise<BrowserEntry[] | null>;
   goUp: () => void;
+  goBack: () => void;
+  goForward: () => void;
   setFocus: (index: number) => void;
   markPlayed: (path: string) => void;
 }
 
+/** A folder and the item that was under the cursor, so going back lands on it. */
+export interface HistoryPlace {
+  dir: string | null;
+  focus: string | null;
+}
+
+/** Enough to wander around a sample library; the oldest are dropped beyond it. */
+const historyLimit = 100;
+
 let latestRequest = 0;
 let jump = { prefix: "", at: 0 };
+/** The first listing (app start) is not a move away from anywhere. */
+let openedOnce = false;
 
 export const useBrowser = create<BrowserState>()((set, get) => ({
   dir: null,
@@ -31,8 +51,11 @@ export const useBrowser = create<BrowserState>()((set, get) => ({
   focusIndex: 0,
   error: null,
   played: new Set(),
+  back: [],
+  forward: [],
 
-  open: async (path, focusPath) => {
+  open: async (path, focusPath, fromHistory = false) => {
+    const left = currentPlace(get());
     const request = ++latestRequest;
     try {
       const items =
@@ -50,11 +73,15 @@ export const useBrowser = create<BrowserState>()((set, get) => ({
       const focused = focusPath === undefined ? -1 : next.findIndex((entry) => samePath(entry.path, focusPath));
       // Without a remembered item, start on the first real entry rather than on "..".
       const firstReal = next.length > 1 && next[0].kind === "parent" ? 1 : 0;
+      // A live reload of the same folder is not a move; neither is a step through the history.
+      const moved = openedOnce && !fromHistory && !sameDir(left.dir, path);
+      openedOnce = true;
       set({
         dir: path,
         entries: next,
         focusIndex: focused >= 0 && next[focused].kind !== "parent" ? focused : firstReal,
         error: null,
+        ...(moved ? { back: [...get().back, left].slice(-historyLimit), forward: [] } : {}),
       });
       if (path !== null) {
         watchDir(path).catch((watchError) => console.warn(`Live reload is off for ${path}: ${watchError}`));
@@ -77,6 +104,28 @@ export const useBrowser = create<BrowserState>()((set, get) => ({
     }
     // Land on the folder we came out of, like every file manager does.
     void get().open(parentOf(current), current);
+  },
+
+  goBack: () => {
+    const { back, forward } = get();
+    const target = back[back.length - 1];
+    if (!target) {
+      return;
+    }
+    const here = currentPlace(get());
+    set({ back: back.slice(0, -1), forward: [...forward, here] });
+    void get().open(target.dir, target.focus ?? undefined, true);
+  },
+
+  goForward: () => {
+    const { back, forward } = get();
+    const target = forward[forward.length - 1];
+    if (!target) {
+      return;
+    }
+    const here = currentPlace(get());
+    set({ forward: forward.slice(0, -1), back: [...back, here] });
+    void get().open(target.dir, target.focus ?? undefined, true);
   },
 
   setFocus: (index) => set({ focusIndex: clampIndex(index, get().entries.length) }),
@@ -122,6 +171,14 @@ export function jumpToName(char: string, list: BrowserEntry[], focusIndex: numbe
   }
 
   return null;
+}
+
+function currentPlace(state: { dir: string | null; entries: BrowserEntry[]; focusIndex: number }): HistoryPlace {
+  return { dir: state.dir, focus: state.entries[state.focusIndex]?.path ?? null };
+}
+
+function sameDir(a: string | null, b: string | null): boolean {
+  return a === null || b === null ? a === b : samePath(a, b);
 }
 
 export function clampIndex(index: number, count: number): number {

@@ -33,8 +33,32 @@
 }
 
 .meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
   font-size: 13px;
   color: var(--app-text-dim);
+}
+
+.time {
+  flex: none;
+}
+
+/* The playing track's folder: a link back to it in the list. */
+.folder {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  color: var(--app-text-dim);
+  border-radius: var(--mantine-radius-sm);
+}
+
+.folder:hover {
+  color: var(--app-accent);
+  text-decoration: underline;
 }
 
 .error {
