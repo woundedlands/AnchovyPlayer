@@ -22,6 +22,12 @@ Var AnchovyExplorerIntegration
 !define MUI_PAGE_CUSTOMFUNCTION_SHOW AnchovyWelcomeShow
 !define MUI_PAGE_CUSTOMFUNCTION_LEAVE AnchovyWelcomeLeave
 
+; The license page (bundle.licenseFile) shows the GPL. It is a license to share and change the
+; program, not terms of use, so the page informs and asks nothing: "Next" instead of "I Agree".
+; Consumed by the license page's macro, which comes after the welcome page, so these do not clash.
+!define MUI_LICENSEPAGE_BUTTON "$(^NextBtn)"
+!define MUI_LICENSEPAGE_TEXT_BOTTOM "You do not need to accept this license to use the program. It sets the terms for sharing and modifying it."
+
 Function AnchovyWelcomeShow
   ${NSD_CreateCheckbox} 120u 170u 195u 12u "Add $\"${ANCHOVY_VERB_LABEL}$\" to Explorer"
   Pop $AnchovyExplorerCheckbox

@@ -28,6 +28,7 @@ import {
   IconSun,
   IconWorld,
 } from "@tabler/icons-react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useT, type LanguageSetting, type Messages } from "./i18n";
 import { accentPresets } from "./palette";
 import { maxTrackGapMs, pulseIntensityStep, resumeThresholds, trackGapStepMs, useSettings } from "./settingsStore";
@@ -36,6 +37,8 @@ import flagRu from "./flags/ru.svg";
 import classes from "./SettingsMenu.module.css";
 
 const hexColor = /^#[0-9a-f]{6}$/i;
+/** Must match the opener:allow-open-url scope in src-tauri/capabilities/default.json. */
+const repositoryUrl = "https://github.com/woundedlands/AnchovyPlayer";
 
 const tabs = ["general", "playback", "look"] as const;
 type Tab = (typeof tabs)[number];
@@ -52,6 +55,9 @@ export function SettingsMenu() {
       </Menu.Target>
       <Menu.Dropdown className={classes.dropdown}>
         <SettingsTabs />
+        <UnstyledButton className={classes.version} onClick={() => void openUrl(repositoryUrl)}>
+          {t.version(__APP_VERSION__)}
+        </UnstyledButton>
       </Menu.Dropdown>
     </Menu>
   );

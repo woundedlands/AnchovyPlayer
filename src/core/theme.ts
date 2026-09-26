@@ -37,7 +37,7 @@ export function buildTheme(accentHex: string): AppTheme {
         vars: () => ({ root: { "--checkbox-icon-color": "var(--app-on-accent)" } }),
       }),
       Slider: Slider.extend({
-        defaultProps: { size: "xs" },
+        defaultProps: { size: "md", thumbSize: 22 },
         classNames: { track: controls.sliderTrack, bar: controls.sliderBar, thumb: controls.sliderThumb },
       }),
       SegmentedControl: SegmentedControl.extend({

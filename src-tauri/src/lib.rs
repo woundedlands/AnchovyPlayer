@@ -330,3 +330,17 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+
+#[cfg(test)]
+mod tests {
+    /// package.json holds the version (Tauri and the UI read it from there); Cargo.toml needs its own copy.
+    #[test]
+    fn cargo_version_matches_package_json() {
+        let version = env!("CARGO_PKG_VERSION");
+        let package = include_str!("../../package.json");
+        assert!(
+            package.contains(&format!("\"version\": \"{version}\"")),
+            "Cargo.toml says {version} but package.json differs: bump both"
+        );
+    }
+}

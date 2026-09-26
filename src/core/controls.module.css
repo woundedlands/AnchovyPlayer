@@ -31,9 +31,8 @@
   background: var(--app-accent-gradient-horizontal);
 }
 
+/* Size comes from the theme (thumbSize), which Mantine also uses to keep the knob inside the ends. */
 .sliderThumb {
-  width: 16px;
-  height: 16px;
   border: none;
   background: var(--app-thumb);
   box-shadow: var(--app-thumb-shadow);

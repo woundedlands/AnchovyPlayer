@@ -11,10 +11,17 @@ Walk a folder with the arrow keys and hear every file the instant it is selected
 
 ---
 
-<!-- Replace the placeholder with docs/media/screenshot-main.png once there is a real screenshot. -->
 <p align="center">
   <img src="docs/media/1.png" width="820" alt="Anchovy Player: the file list with the player bar and its waveform">
 </p>
+
+## Installation
+
+**[Download the latest installer from Releases](https://github.com/woundedlands/AnchovyPlayer/releases/latest)** - one small `.exe` for Windows 10 and 11, nothing else to install.
+
+- The installer offers an optional **"Open with Anchovy Player"** entry in Explorer's context menu; it never takes over your default player.
+- The installer is not code-signed yet, so Windows SmartScreen may warn about an unknown publisher: choose **More info → Run anyway**.
+- Uninstall from *Settings → Apps* like any other program; the Explorer entries go with it.
 
 ## Why
 

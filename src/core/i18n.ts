@@ -55,6 +55,7 @@ const en = {
   noticePathsCopied: (count: number) => (count === 1 ? "Path copied" : `${count} paths copied`),
 
   settings: "Settings",
+  version: (version: string) => `Anchovy Player ${version}`,
   tabPlayback: "Playback",
   tabLook: "Look",
   tabGeneral: "General",
@@ -150,6 +151,7 @@ const ru: Messages = {
   noticePathsCopied: (count) => (count === 1 ? "Путь скопирован" : `Скопировано путей: ${count}`),
 
   settings: "Настройки",
+  version: (version) => `Anchovy Player ${version}`,
   tabPlayback: "Звук",
   tabLook: "Вид",
   tabGeneral: "Общие",

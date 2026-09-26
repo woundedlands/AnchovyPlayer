@@ -1,6 +1,6 @@
 [package]
 name = "anchovy-player"
-version = "0.1.0"
+version = "1.0.0"
 description = "Instant-response audio player with an integrated file browser"
 edition = "2024"
 license = "GPL-3.0-or-later"

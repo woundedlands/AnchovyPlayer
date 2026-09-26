@@ -2,7 +2,7 @@
   /* One motion for the tab highlight, the slides and the height: quick, with a short soft landing. */
   --settings-slide: 220ms cubic-bezier(0.25, 0.8, 0.25, 1);
 
-  padding: 8px 16px 16px;
+  padding: 8px 16px 4px;
   overflow: hidden;
 }
 
@@ -55,7 +55,9 @@
   flex: 0 0 100%;
   flex-direction: column;
   gap: 16px;
-  padding: 16px 16px 0;
+  /* Bottom padding inside the clipping viewport: a slider knob at the end of a panel overhangs its
+     track and was cut in half by the viewport's edge. */
+  padding: 16px 16px 12px;
   transition: opacity var(--settings-slide);
 }
 
@@ -187,4 +189,23 @@
 .cyclerIcon {
   display: flex;
   color: var(--app-accent);
+}
+
+/* Quietly at the foot of the settings: which build this is, and a link to the project page.
+   No update checks. */
+.version {
+  display: block;
+  margin: 0 auto 6px;
+  font-size: 11px;
+  color: var(--app-text-dim);
+  opacity: 0.7;
+  transition:
+    color 120ms ease,
+    opacity 120ms ease;
+}
+
+.version:hover {
+  color: var(--app-accent);
+  opacity: 1;
+  text-decoration: underline;
 }
