@@ -88,6 +88,7 @@ The user installs one NSIS `.exe` (a few MB) and nothing else.
 - The MSVC runtime is linked statically (`src-tauri/.cargo/config.toml`, `+crt-static`). Without it the exe imports `VCRUNTIME140.dll` and fails to start on a clean Windows. Check with `dumpbin /dependents` after touching build flags: only system DLLs are allowed. `api-ms-win-crt-*` imports are fine - that is the Universal CRT, part of Windows 10 and later; `VCRUNTIME140.dll` or `MSVCP140.dll` are not.
 - libopus is a static `opus.lib`; there is no `opus.dll` to ship.
 - WebView2 is not bundled: nearly every Windows 10/11 machine has it, and Tauri's default bootstrapper downloads it during setup on the rare one that does not. Bundling the offline installer made the setup ~210 MB for a ~7 MB app.
+- README media (screenshots, GIFs) live in `docs/media/`; the README's screenshot is a placeholder SVG there until a real `screenshot-main.png` replaces it.
 - Bundle what a normal machine may lack, not what the OS already ships. Repo size is cheaper than setup steps.
 - **Explorer registration lives in `src-tauri/windows/installer-hooks.nsh`**, written to `SHCTX` so it follows the install mode. Its extension list must match `playableExtensions` in `src/modules/browser/entries.ts` (minus video containers). Tauri includes the hooks file before any page is declared, which is why a `MUI_PAGE_CUSTOMFUNCTION_SHOW`/`LEAVE` defined there attaches to the welcome page - and why `MUI_BGCOLOR` is not defined yet at that point.
 
