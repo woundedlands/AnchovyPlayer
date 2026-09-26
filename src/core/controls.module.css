@@ -1,0 +1,54 @@
+/* App-wide look of Mantine's form controls, applied through the theme (theme.ts). The accent gradient
+   marks "on" and "chosen", like the play button. */
+
+.checkboxInput {
+  border: 1.5px solid var(--app-control-track);
+  background: transparent;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease;
+}
+
+.checkboxInput:checked {
+  border-color: transparent;
+  background: var(--app-accent-gradient);
+}
+
+/* Mantine positions the icon (absolute, centred); this makes it a small square rounded in
+   proportion to the box (radius sm on 24px), so the two corners read as one shape. */
+.checkboxMark {
+  width: 42%;
+  height: 42%;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.sliderTrack::before {
+  background: var(--app-control-track);
+}
+
+.sliderBar {
+  background: var(--app-accent-gradient-horizontal);
+}
+
+.sliderThumb {
+  width: 16px;
+  height: 16px;
+  border: none;
+  background: var(--app-thumb);
+  box-shadow: var(--app-thumb-shadow);
+}
+
+.segmentedRoot {
+  background: var(--app-control-track);
+}
+
+.segmentedIndicator {
+  background: var(--app-accent-gradient);
+  box-shadow: none;
+}
+
+.segmentedLabel[data-active],
+.segmentedLabel[data-active]:hover {
+  color: var(--app-on-accent);
+}

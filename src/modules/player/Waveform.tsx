@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useComputedColorScheme } from "@mantine/core";
 import { useElementSize } from "@mantine/hooks";
+import { withAlpha } from "../../core/palette";
+import { currentPulse, subscribePulse } from "../../core/pulse";
 import { useSettings } from "../../core/settingsStore";
 import { loadWaveform, type Waveform as WaveformData } from "./api";
 import classes from "./Waveform.module.css";
@@ -13,6 +15,16 @@ interface WaveformProps {
 }
 
 const laneGap = 6;
+/** Visualizer: the whole wave lifts a little on the beat, most around the playhead (spread: share of the width). */
+const pulseBaseAlpha = 0.21;
+const pulsePeakAlpha = 0.8;
+/**
+ * The peak reaches this share of the played part on each side: a fixed share of the whole width
+ * lit up everything played so far near the start of a track, and it flashed.
+ */
+const pulseSpreadOfPlayed = 0.3;
+const noPulse = () => 0;
+const noSubscription = () => () => {};
 
 export function Waveform({ path, position, duration, onSeek }: WaveformProps) {
   const [data, setData] = useState<WaveformData | null>(null);
@@ -22,6 +34,12 @@ export function Waveform({ path, position, duration, onSeek }: WaveformProps) {
   // Canvas colours come from CSS variables, which a canvas does not follow: redraw on theme changes.
   const accentColor = useSettings((state) => state.accentColor);
   const dragging = useRef(false);
+  const pulseIntensity = useSettings((state) => state.waveformPulseIntensity);
+  // Subscribed only while the setting is on: off, the pulse causes no renders here at all.
+  const pulse = useSyncExternalStore(
+    pulseIntensity > 0 ? subscribePulse : noSubscription,
+    pulseIntensity > 0 ? currentPulse : noPulse,
+  );
 
   useEffect(() => {
     setData(null);
@@ -104,11 +122,15 @@ export function Waveform({ path, position, duration, onSeek }: WaveformProps) {
         context.fillRect(column, y1, 1, Math.max(1, y2 - y1));
       }
     }
+    if (pulse > 0) {
+      const tint = styles.getPropertyValue("--app-wave-pulse").trim();
+      drawPulse(context, width, height, total > 0 ? progress : 0.5, pulse * pulseIntensity, tint);
+    }
     if (total > 0) {
       context.fillStyle = playedColor;
       context.fillRect(Math.min(playedX, width - 2), 0, 2, height);
     }
-  }, [data, width, height, progress, total, scheme, accentColor]);
+  }, [data, width, height, progress, total, scheme, accentColor, pulse, pulseIntensity]);
 
   const seekFromPointer = (event: React.PointerEvent<HTMLDivElement>) => {
     if (total <= 0) {
@@ -140,4 +162,32 @@ export function Waveform({ path, position, duration, onSeek }: WaveformProps) {
       <canvas ref={canvas} className={classes.canvas} />
     </div>
   );
+}
+
+/**
+ * Tints what is already drawn - the bars only, never the background (`source-atop`) - towards
+ * `tint`: a light lift over the whole wave and a peak around the playhead, sized by the played part.
+ * `strength` is the pulse times the user's intensity.
+ */
+function drawPulse(
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  center: number,
+  strength: number,
+  tint: string,
+) {
+  const base = withAlpha(tint, Math.min(strength * pulseBaseAlpha, 1));
+  const peak = withAlpha(tint, Math.min(strength * pulsePeakAlpha, 1));
+  const spread = center * pulseSpreadOfPlayed;
+  const gradient = context.createLinearGradient(0, 0, width, 0);
+  gradient.addColorStop(0, base);
+  gradient.addColorStop(Math.max(center - spread, 0), base);
+  gradient.addColorStop(center, peak);
+  gradient.addColorStop(Math.min(center + spread, 1), base);
+  gradient.addColorStop(1, base);
+  context.globalCompositeOperation = "source-atop";
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, width, height);
+  context.globalCompositeOperation = "source-over";
 }

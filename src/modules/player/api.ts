@@ -9,6 +9,8 @@ export interface PlaybackStatus {
   position: number;
   duration: number;
   endedVoiceId: number;
+  /** Loudness since the previous status: RMS before volume, 0..1. */
+  level: number;
 }
 
 export interface TrackInfo {

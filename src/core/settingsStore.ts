@@ -15,10 +15,9 @@ const languageSettings: LanguageSetting[] = ["auto", "en", "ru"];
 export const maxTrackGapMs = 1000;
 export const trackGapStepMs = 50;
 
-/** Volume moves in 5% steps and always lands on a multiple of 5%, never 6 / 11 / 16. */
-export const volumeStep = 0.05;
-
 export const maxVolume = 2;
+
+export const pulseIntensityStep = 0.05;
 
 /** Tracks at least this long continue where they were stopped; 0 turns resuming off. */
 export const resumeThresholds = [0, 10, 30, 60, 300, 600];
@@ -44,6 +43,10 @@ export interface Settings {
   reopenLastFolder: boolean;
   /** Tracks at least this long continue where they were stopped; 0 is off. One of `resumeThresholds`. */
   resumeMinSeconds: number;
+  /** Visualizer strength 0..1 (0 is off): the playing row in the list glows with the music. */
+  rowPulseIntensity: number;
+  /** Visualizer strength 0..1 (0 is off): the waveform brightens with the music, most at the playhead. */
+  waveformPulseIntensity: number;
 }
 
 /**
@@ -65,6 +68,8 @@ const defaults: Settings = {
   language: "auto",
   reopenLastFolder: true,
   resumeMinSeconds: 30,
+  rowPulseIntensity: 0.75,
+  waveformPulseIntensity: 0.75,
 };
 
 interface SettingsState extends Settings {
@@ -117,6 +122,8 @@ async function saveSettings(): Promise<void> {
     language: state.language,
     reopenLastFolder: state.reopenLastFolder,
     resumeMinSeconds: state.resumeMinSeconds,
+    rowPulseIntensity: state.rowPulseIntensity,
+    waveformPulseIntensity: state.waveformPulseIntensity,
   };
   try {
     await invoke("save_settings", { contents: JSON.stringify(file, null, 2) });
@@ -146,6 +153,13 @@ function parseSettings(raw: unknown): Settings {
     language: oneOf(source.language, languageSettings, defaults.language),
     reopenLastFolder: typeof source.reopenLastFolder === "boolean" ? source.reopenLastFolder : defaults.reopenLastFolder,
     resumeMinSeconds: oneOf(source.resumeMinSeconds, resumeThresholds, defaults.resumeMinSeconds),
+    rowPulseIntensity: onGrid(source.rowPulseIntensity, 1, pulseIntensityStep, defaults.rowPulseIntensity),
+    waveformPulseIntensity: onGrid(
+      source.waveformPulseIntensity,
+      1,
+      pulseIntensityStep,
+      defaults.waveformPulseIntensity,
+    ),
   };
 }
 

@@ -8,6 +8,28 @@
   font-size: 15px;
   cursor: default;
   transition: background-color 80ms ease;
+  /* The pulse layer sits behind the content without escaping the row. */
+  position: relative;
+  isolation: isolate;
+}
+
+/* The visualizer: an accent glow from the left edge that swells with the music (core/pulse.ts).
+   Only transform and opacity change, so the compositor animates it. */
+.row[data-current]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--app-accent) 26%, transparent), transparent);
+  transform-origin: left;
+  transform: scaleX(calc(0.3 + 0.7 * var(--pulse, 0)));
+  /* Intensity 0.75 (the default) peaks at 0.9. */
+  opacity: calc(var(--pulse, 0) * var(--pulse-intensity, 0) * 1.2);
+  transition:
+    transform 90ms linear,
+    opacity 90ms linear;
+  pointer-events: none;
 }
 
 .row:hover {
@@ -114,6 +136,20 @@
   transition:
     opacity 120ms ease,
     transform 120ms ease;
+}
+
+/* The playing row's button matches the player's play button. */
+.row[data-current] .play {
+  background: var(--app-accent-gradient);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease,
+    filter 120ms ease;
+}
+
+.row[data-current] .play:hover {
+  background: var(--app-accent-gradient);
+  filter: brightness(1.06);
 }
 
 .row[data-kind="audio"]:hover .play,

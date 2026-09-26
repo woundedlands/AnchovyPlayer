@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type CSSProperties } from "react";
 import { ActionIcon } from "@mantine/core";
 import {
   IconArrowBackUp,
@@ -12,6 +12,8 @@ import { startDrag } from "@crabnebula/tauri-plugin-drag";
 import { extensionOf } from "../../core/paths";
 import { useT } from "../../core/i18n";
 import { dragIconPath } from "./api";
+import { attachPulse } from "../../core/pulse";
+import { useSettings } from "../../core/settingsStore";
 import type { BrowserEntry } from "./entries";
 import classes from "./FileRow.module.css";
 
@@ -57,6 +59,17 @@ export function FileRow({
 }: FileRowProps) {
   const t = useT();
   const press = useRef<{ x: number; y: number; deferred: boolean } | null>(null);
+  const rowElement = useRef<HTMLDivElement>(null);
+  const pulseIntensity = useSettings((state) => state.rowPulseIntensity);
+  const pulsing = current && pulseIntensity > 0;
+
+  useEffect(() => {
+    if (!pulsing || !rowElement.current) {
+      return;
+    }
+
+    return attachPulse(rowElement.current);
+  }, [pulsing]);
 
   const beginDragOut = () => {
     const paths = getDragPaths();
@@ -66,7 +79,9 @@ export function FileRow({
 
   return (
     <div
+      ref={rowElement}
       className={classes.row}
+      style={pulsing ? ({ "--pulse-intensity": pulseIntensity } as CSSProperties) : undefined}
       data-focused={focused || undefined}
       data-zone-active={zoneActive || undefined}
       data-current={current || undefined}

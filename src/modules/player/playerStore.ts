@@ -1,10 +1,24 @@
 import { create } from "zustand";
-import { maxVolume, repeatModes, useSettings, volumeStep } from "../../core/settingsStore";
+import { maxVolume, repeatModes, useSettings } from "../../core/settingsStore";
 import * as api from "./api";
 import { nextTrack, previousTrack } from "./playOrder";
 
 /** Pressing "previous" this far into a track restarts it instead, like every hardware player. */
 const restartThresholdSeconds = 3;
+
+/**
+ * Volume steps accelerate the longer the user keeps pushing: a single tap or wheel notch moves 1%,
+ * a held key or a fast spin grows to 2% and then 5%. Time-based rather than count-based, so key
+ * autorepeat, a mouse wheel and a touchpad ramp up alike. A pause longer than the gap or a change
+ * of direction starts over at 1%.
+ */
+const volumeStreakGapMs = 250;
+const volumeStepTiers = [
+  { afterMs: 900, percent: 5 },
+  { afterMs: 400, percent: 2 },
+  { afterMs: 0, percent: 1 },
+];
+const volumeStreak = { direction: 0, startedAt: 0, lastAt: 0 };
 
 export interface CurrentTrack {
   path: string;
@@ -48,11 +62,18 @@ interface PlayerState {
   previous: () => void;
   cycleRepeat: () => void;
   toggleShuffle: () => void;
-  /** One 5% step up or down, landing on the 5% grid. */
+  /**
+   * Silences output while keeping the volume. Memory only: an app that starts silent looks broken.
+   * Any volume change unmutes.
+   */
+  muted: boolean;
+  toggleMute: () => void;
+  setVolume: (volume: number) => void;
+  /** One step up or down, sized by how insistently the user is stepping (see `volumeStepTiers`). */
   stepVolume: (direction: 1 | -1) => void;
 }
 
-const idleStatus: api.PlaybackStatus = { state: "idle", voiceId: 0, position: 0, duration: 0, endedVoiceId: 0 };
+const idleStatus: api.PlaybackStatus = { state: "idle", voiceId: 0, position: 0, duration: 0, endedVoiceId: 0, level: 0 };
 
 let playlist: string[] = [];
 const shufflePlayed = new Set<string>();
@@ -183,17 +204,42 @@ export const usePlayer = create<PlayerState>()((set, get) => {
       update({ shuffle: !shuffle });
     },
 
+    muted: false,
+
+    toggleMute: () => set({ muted: !get().muted }),
+
+    setVolume: (volume) => {
+      set({ muted: false });
+      useSettings.getState().update({ volume });
+    },
+
     stepVolume: (direction) => {
-      const { volume, update } = useSettings.getState();
-      // From an off-grid value (dragged to 6%) the first step snaps to the neighbour: up to 10%, down to 5%.
-      // The epsilon keeps floating-point noise (0.15000001) from skipping a step.
-      const steps = volume / volumeStep;
-      const target = direction > 0 ? Math.floor(steps + 1e-6) + 1 : Math.ceil(steps - 1e-6) - 1;
-      const next = Math.min(Math.max(target * volumeStep, 0), maxVolume);
-      update({ volume: Math.round(next * 100) / 100 });
+      const { volume } = useSettings.getState();
+      const step = volumeStepPercent(direction);
+      // Each step lands on its own grid, so coarse steps from 37% go 40, 45, 50 rather than 42, 47, 52.
+      const percent = Math.round(volume * 100);
+      const target = direction > 0 ? (Math.floor(percent / step) + 1) * step : (Math.ceil(percent / step) - 1) * step;
+      const next = Math.min(Math.max(target, 0), maxVolume * 100);
+      get().setVolume(next / 100);
     },
   };
 });
+
+function volumeStepPercent(direction: 1 | -1): number {
+  const now = performance.now();
+  if (direction !== volumeStreak.direction || now - volumeStreak.lastAt > volumeStreakGapMs) {
+    volumeStreak.direction = direction;
+    volumeStreak.startedAt = now;
+  }
+  volumeStreak.lastAt = now;
+  const streakMs = now - volumeStreak.startedAt;
+  const tier = volumeStepTiers.find((candidate) => streakMs >= candidate.afterMs);
+  if (!tier) {
+    throw new Error("volumeStepTiers must end with a tier starting at 0 ms");
+  }
+
+  return tier.percent;
+}
 
 /**
  * Connects the store to the engine: status events in, volume and looping out, and what happens when
@@ -201,11 +247,16 @@ export const usePlayer = create<PlayerState>()((set, get) => {
  */
 export function connectPlayer(): () => void {
   const applyEngineSettings = () => {
-    void api.setVolume(useSettings.getState().volume);
+    void api.setVolume(usePlayer.getState().muted ? 0 : useSettings.getState().volume);
     void api.setLooping(engineLooping());
   };
   applyEngineSettings();
   const stopSettings = useSettings.subscribe(applyEngineSettings);
+  const stopMute = usePlayer.subscribe((state, previous) => {
+    if (state.muted !== previous.muted) {
+      applyEngineSettings();
+    }
+  });
   const unlisten = api.onPlaybackStatus((status) => {
     usePlayer.setState({ status });
     releaseSeekTarget(status);
@@ -214,6 +265,7 @@ export function connectPlayer(): () => void {
 
   return () => {
     stopSettings();
+    stopMute();
     void unlisten.then((stop) => stop());
   };
 }

@@ -49,6 +49,10 @@ function handleGlobalKey(event: KeyboardEvent, inSearch: boolean): boolean {
     player.stepVolume(event.key === "ArrowUp" ? 1 : -1);
     return true;
   }
+  if (ctrl && event.code === "KeyM") {
+    player.toggleMute();
+    return true;
+  }
   if (ctrl && event.code === "KeyF") {
     searchInput.current?.focus();
     searchInput.current?.select();

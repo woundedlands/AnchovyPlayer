@@ -142,6 +142,9 @@ pub struct Status {
     /// Id of the last voice that played to its natural end.
     ended_voice_id: AtomicU64,
     sample_rate: AtomicU32,
+    /// Loudest block RMS since the last `take_level`, before volume, as `f32` bits. Non-negative
+    /// floats order like their bits, so `fetch_max` on the integer keeps the loudest.
+    level_bits: AtomicU32,
 }
 
 impl Status {
@@ -167,6 +170,12 @@ impl Status {
 
     pub fn sample_rate(&self) -> u32 {
         self.sample_rate.load(Ordering::Acquire)
+    }
+
+    /// Output loudness (RMS, pre-volume) since the previous call. Taking it resets the hold, so a
+    /// reader polling slower than the callback still sees every beat rather than a random block.
+    pub fn take_level(&self) -> f32 {
+        f32::from_bits(self.level_bits.swap(0, Ordering::AcqRel))
     }
 }
 
@@ -246,6 +255,9 @@ impl Mixer {
         self.block = owned_block;
         self.fade_block = owned_fade_block;
 
+        // Before volume: the visualizer shows the music, not the volume setting.
+        let level = block_rms(&self.block[..frames * CHANNELS]);
+        self.status.level_bits.fetch_max(level.to_bits(), Ordering::AcqRel);
         self.apply_volume(frames);
         self.publish_status();
     }
@@ -335,6 +347,15 @@ impl Mixer {
             }
         }
     }
+}
+
+fn block_rms(samples: &[f32]) -> f32 {
+    if samples.is_empty() {
+        return 0.0;
+    }
+    let sum: f32 = samples.iter().map(|s| s * s).sum();
+
+    (sum / samples.len() as f32).sqrt()
 }
 
 fn write_frame<T: SizedSample + FromSample<f32>>(frame: &mut [T], stereo: &[f32]) {

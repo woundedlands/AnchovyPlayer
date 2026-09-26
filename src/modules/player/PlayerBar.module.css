@@ -95,25 +95,36 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 6px;
 }
 
-.volumeIcon {
+.mute {
   color: var(--app-text-dim);
   flex: none;
 }
 
-.slider {
-  width: 160px;
+.volume[data-muted] .mute {
+  color: var(--app-accent);
 }
 
+/* Fixed width: the slider must not shift under the pointer as the digits change. */
 .percent {
   width: 44px;
+  margin-right: 4px;
   font-size: 13px;
-  text-align: right;
   color: var(--app-text-dim);
 }
 
 .percent[data-boost] {
   color: var(--app-accent);
+}
+
+/* Muted keeps the level visible but plainly off. */
+.volume[data-muted] .percent {
+  text-decoration: line-through;
+  color: var(--app-text-dim);
+}
+
+.volume[data-muted] [role="slider"] {
+  opacity: 0.4;
 }

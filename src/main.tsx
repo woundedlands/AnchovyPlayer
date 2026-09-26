@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import "@fontsource-variable/inter";
+import "@fontsource-variable/nunito";
 import "@mantine/core/styles.css";
 import "./core/global.css";
 import { App } from "./core/App";

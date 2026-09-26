@@ -1,0 +1,44 @@
+/* As tall as the transport row (the play button), so the whole block around the wedge takes clicks. */
+.root {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 160px;
+  height: 56px;
+  cursor: pointer;
+  touch-action: none;
+}
+
+/* Half the row's height. */
+.wedge {
+  position: relative;
+  width: 100%;
+  height: 28px;
+  clip-path: polygon(0 100%, 100% 0, 100% 100%);
+  background: var(--app-wave);
+}
+
+/* Full width and clipped from the right, so the gradient belongs to the wedge and deepens with loudness. */
+.fill {
+  position: absolute;
+  inset: 0;
+  background: var(--app-accent-gradient-horizontal);
+  transition: filter 120ms ease;
+}
+
+.root:hover .fill {
+  filter: brightness(1.06);
+}
+
+/* 100%: everything to the right of it is boost. Sticks out of the wedge so it reads at any volume. */
+.unityMark {
+  position: absolute;
+  top: 50%;
+  left: calc(50% - 1px);
+  width: 2px;
+  height: 36px;
+  transform: translateY(-50%);
+  border-radius: 1px;
+  background: var(--app-text-dim);
+  pointer-events: none;
+}

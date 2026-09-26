@@ -63,9 +63,17 @@ export function buildPalette(accentHex: string): Palette {
       // Shades of the one accent, from the mid shade (the brightest point) towards dark:
       // visible as a gradient, never brighter than the accent itself.
       "--app-accent-gradient": `linear-gradient(135deg, ${accent[6]} 0%, ${accent[9]} 100%)`,
+      "--app-accent-gradient-horizontal": `linear-gradient(90deg, ${accent[6]} 0%, ${accent[9]} 100%)`,
       "--app-wave-played-start": accent[5],
       "--app-wave-played-end": accent[9],
+      // What the waveform brightens towards on the beat (visualizer).
+      "--app-wave-pulse": accent[3],
       "--app-shadow": `0 1px 2px ${withAlpha(tinted(0.3, 0.03), 0.06)}, 0 8px 24px ${withAlpha(tinted(0.3, 0.03), 0.07)}`,
+      // Form controls: the empty part of a track or box, the knob, and text on the accent gradient.
+      "--app-control-track": withAlpha(tinted(0.25, 0.01), 0.14),
+      "--app-thumb": tinted(0.995, 0.003),
+      "--app-thumb-shadow": `0 1px 3px ${withAlpha(tinted(0.2, 0.03), 0.3)}`,
+      "--app-on-accent": tinted(0.99, 0.004),
     },
     dark: {
       "--app-bg": graphite[8],
@@ -81,14 +89,21 @@ export function buildPalette(accentHex: string): Palette {
       "--app-wave": withAlpha(graphite[0], 0.18),
       "--app-wave-played": accent[3],
       "--app-accent-gradient": `linear-gradient(135deg, ${accent[3]} 0%, ${accent[6]} 100%)`,
+      "--app-accent-gradient-horizontal": `linear-gradient(90deg, ${accent[3]} 0%, ${accent[6]} 100%)`,
       "--app-wave-played-start": accent[3],
       "--app-wave-played-end": accent[7],
+      "--app-wave-pulse": tinted(0.97, 0.02),
       "--app-shadow": "0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.3)",
+      "--app-control-track": withAlpha(graphite[0], 0.12),
+      "--app-thumb": graphite[0],
+      "--app-thumb-shadow": "0 1px 3px rgba(0, 0, 0, 0.5)",
+      // Near-white on the accent in both themes, like the play button's icon.
+      "--app-on-accent": tinted(0.99, 0.004),
     },
   };
 }
 
-function withAlpha(hex: string, alpha: number): string {
+export function withAlpha(hex: string, alpha: number): string {
   const [r, g, b] = hexToRgb(hex).map((v) => Math.round(v * 255));
 
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;

@@ -40,6 +40,8 @@ pub struct PlaybackStatus {
     pub position: f64,
     pub duration: f64,
     pub ended_voice_id: u64,
+    /// Loudness since the previous status, 0..1 RMS before volume; drives the visualizer.
+    pub level: f32,
 }
 
 #[derive(Serialize, Clone, Copy)]
@@ -226,6 +228,7 @@ impl Engine {
         self.0.output.wait_for_activity(timeout)
     }
 
+    /// Takes the level hold (see `Status::take_level`): one reader only, the status emitter.
     pub fn status(&self) -> PlaybackStatus {
         let inner = &self.0;
         let status = &inner.output.status;
@@ -244,6 +247,7 @@ impl Engine {
             position: status.position_frames() as f64 / rate,
             duration,
             ended_voice_id: status.ended_voice_id(),
+            level: status.take_level(),
         }
     }
 

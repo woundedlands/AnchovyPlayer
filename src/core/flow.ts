@@ -12,6 +12,7 @@ import { prefetch, stop } from "../modules/player/api";
 import { connectPlayer, usePlayer } from "../modules/player/playerStore";
 import { nameOf, parentOf, pathKey, samePath } from "./paths";
 import { t } from "./i18n";
+import { feedPulse, stopPulse } from "./pulse";
 import { connectResume } from "./resume";
 import { useSession } from "./sessionStore";
 import { useSettings } from "./settingsStore";
@@ -292,6 +293,18 @@ export function startApp(): () => void {
     void openPath(path);
   });
 
+  const stopVisualizer = usePlayer.subscribe((state, previous) => {
+    if (state.status === previous.status) {
+      return;
+    }
+    const { rowPulseIntensity, waveformPulseIntensity } = useSettings.getState();
+    if (state.status.state === "playing" && (rowPulseIntensity > 0 || waveformPulseIntensity > 0)) {
+      feedPulse(state.status.level);
+    } else {
+      stopPulse();
+    }
+  });
+
   const stopTrack = usePlayer.subscribe((state, previous) => {
     if (state.track && state.track.path !== previous.track?.path) {
       useBrowser.getState().markPlayed(state.track.path);
@@ -385,6 +398,7 @@ export function startApp(): () => void {
     stopPlayer();
     stopResume();
     stopLanguage();
+    stopVisualizer();
     stopTrack();
     stopBrowserPrefetch();
     stopSearchPrefetch();

@@ -1,4 +1,4 @@
-import { ActionIcon, Slider, Text, Tooltip, UnstyledButton } from "@mantine/core";
+import { ActionIcon, Text, Tooltip, UnstyledButton } from "@mantine/core";
 import {
   IconArrowsShuffle,
   IconPlayerPauseFilled,
@@ -13,9 +13,10 @@ import {
   IconVolume3,
 } from "@tabler/icons-react";
 import { nameOf, parentOf } from "../../core/paths";
-import { maxVolume, useSettings, type RepeatMode } from "../../core/settingsStore";
+import { useSettings, type RepeatMode } from "../../core/settingsStore";
 import { useT, type Messages } from "../../core/i18n";
 import { usePlayer } from "./playerStore";
+import { VolumeSlider } from "./VolumeSlider";
 import { Waveform } from "./Waveform";
 import classes from "./PlayerBar.module.css";
 
@@ -53,7 +54,7 @@ export function PlayerBar({ active, onActivate, onTogglePlay, onShowInList, onPl
       onPointerDown={(event) => {
         // Transport buttons and the volume slider are a remote control: they act without taking
         // over the arrow keys, which stay with the file list.
-        if (!(event.target as Element).closest("button, .mantine-Slider-root")) {
+        if (!(event.target as Element).closest("button, [role=slider]")) {
           onActivate();
         }
       }}
@@ -134,22 +135,16 @@ export function PlayerBar({ active, onActivate, onTogglePlay, onShowInList, onPl
           </Tooltip>
         </div>
 
-        <div className={classes.volume}>
-          <VolumeIcon volume={settings.volume} />
-          <Slider
-            className={classes.slider}
-            min={0}
-            max={maxVolume}
-            step={0.01}
-            value={settings.volume}
-            onChange={(volume) => settings.update({ volume })}
-            label={(value) => `${Math.round(value * 100)}%`}
-            marks={[{ value: 1 }]}
-            size="sm"
-          />
+        <div className={classes.volume} data-muted={player.muted || undefined}>
+          <Tooltip label={player.muted ? t.unmute : t.mute}>
+            <ActionIcon variant="subtle" size="lg" radius="xl" className={classes.mute} onClick={player.toggleMute}>
+              <VolumeIcon volume={player.muted ? 0 : settings.volume} />
+            </ActionIcon>
+          </Tooltip>
           <Text className={classes.percent} data-boost={settings.volume > 1 || undefined}>
             {Math.round(settings.volume * 100)}%
           </Text>
+          <VolumeSlider value={settings.volume} onChange={player.setVolume} />
         </div>
       </div>
     </footer>
@@ -180,13 +175,13 @@ function RepeatIcon({ mode }: { mode: RepeatMode }) {
 
 function VolumeIcon({ volume }: { volume: number }) {
   if (volume === 0) {
-    return <IconVolume3 size={20} className={classes.volumeIcon} />;
+    return <IconVolume3 size={20} />;
   }
   if (volume < 0.5) {
-    return <IconVolume2 size={20} className={classes.volumeIcon} />;
+    return <IconVolume2 size={20} />;
   }
 
-  return <IconVolume size={20} className={classes.volumeIcon} />;
+  return <IconVolume size={20} />;
 }
 
 /** Units follow the track length, so position and duration read alike: "12 ms / 40 ms", "1:05 / 3:20". */
